@@ -1,0 +1,26 @@
+# 忽略编译产生的临时文件
+*.o
+*.class
+*.xlsx
+*.xls
+*.word
+*.csv
+*.txt
+*.pyc
+*.out
+*.err
+*.cache
+*.idea
+*.exe
+*.jar
+*.war
+
+# 忽略日志文件
+/logs/
+/data/
+
+# 忽略敏感信息文件
+secret.txt
+
+# 不忽略特定目录下的文件
+#!src/config.ini
