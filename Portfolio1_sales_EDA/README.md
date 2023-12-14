@@ -58,7 +58,7 @@ _of core file_
   3.4.User Stickiness
 4.BRAND AND PRODUCT ANALYSIS
   4.1.Performance of Brands
-    4.1.1.highest-heat brand (whichever view/cart/purchase)
+    4.1.1.highest-heat brand
     4.1.2.outstanding brands
     4.1.3.Problematic brands
   4.2.Performance of Products
