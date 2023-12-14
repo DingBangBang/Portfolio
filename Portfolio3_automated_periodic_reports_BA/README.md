@@ -1,4 +1,4 @@
-# Portfolio_userinfo_NLP
+# Portfolio3_automated_periodic_reports_BA
 _**This is an independent project that automates periodic reports in HTML, email and Excel format.**_
 
 _Priliminary Language: `Python`, `SQL`, `HTML`_
