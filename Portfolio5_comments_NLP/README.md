@@ -7,4 +7,4 @@ _Core File: [SHU_comments_NLP.py](Portfolio5_comments_NLP/thesis_project/SHU_com
 
 # Sentiment Analysis Mindmap
 _general guideline when dealing with text_
-![mindmap](Portfolio5_comments_NLP/thesis_project/sentiment_analysis_mindmap.png)
+![mindmap](./thesis_project/sentiment_analysis_mindmap.png)
