@@ -1,4 +1,4 @@
-# TMall-D11-Sales-Analysis
+# TMall-Sales-Analysis
 **_Exploration Analysis of TMall sales data from Kaggle in Double11._**
 
 _Primary Language: `Python`_
