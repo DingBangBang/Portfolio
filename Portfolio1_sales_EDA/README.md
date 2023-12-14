@@ -47,7 +47,20 @@ _of core file_
       2.2.2.1.histplot of RFM distribution
   2.3.User Segmentation
     2.3.1.User Tags Distribution BarChart
-3. PLATFORM ANALYSIS
-4. BRAND AND PRODUCT ANALYSIS
-5. SUMMARY
+3.PLATFROM ANALYSIS
+  3.1.User Engagement
+    3.1.1.daily engagement of platfrom
+    3.1.2.hourly engagement of platfrom
+  3.2.Conversion Rate in Finer Granularity
+    3.2.1.total conversion rate
+    3.2.2.level conversion rate
+  3.3.Retention Rate
+  3.4.User Stickiness
+4.BRAND AND PRODUCT ANALYSIS
+  4.1.Performance of Brands
+    4.1.1.highest-heat brand (whichever view/cart/purchase)
+    4.1.2.outstanding brands
+    4.1.3.Problematic brands
+  4.2.Performance of Products
+5.SUMMARY
 ```
