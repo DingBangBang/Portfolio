@@ -12,12 +12,8 @@ a toB open-source analytics and visualization platform that allows you to query,
 
 # General guideline of dashboard_v2
 <kbd>
-<img width="1207" alt="image" src="https://github.com/DingBangBang/Portfolio2_KA_dashboard_VLZ/assets/76546222/98e87839-b043-4c5c-a330-7340b2f84035">
+<img width="985" alt="image" src="https://github.com/DingBangBang/Portfolio/assets/76546222/c4fb533a-7bab-444e-8cb1-0047383c889c">
 </kbd>
 
 # General guideline of hirarchy_v2
-<kbd>
-<img width="1207" alt="image" src="https://github.com/DingBangBang/Portfolio2_KA_dashboard_VLZ/assets/76546222/46c59be0-afac-4103-b21a-be42a52e01f7">
-<!--![VIP_hirarchy_system](https://github.com/DingBangBang/Portfolio2_KA_dashboard_VLZ/assets/76546222/46c59be0-afac-4103-b21a-be42a52e01f7.png)-->
-</kbd>
-
+![VIP_hirarchy_system](./VIP_hirarchy_system.png)
