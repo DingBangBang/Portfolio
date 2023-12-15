@@ -1,5 +1,5 @@
 # 🗺 Bonnie's Portfolio
-Welcome to my porfolio! It showcases a range of projects spanning different domains and technologies in data fields here.
+Welcome to my portfolio! It showcases a range of projects spanning different domains and technologies in data fields here.
 
 # 📚 Table of Contents
 
