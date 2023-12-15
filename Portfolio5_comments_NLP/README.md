@@ -1,5 +1,5 @@
 # Portfolio5_comments_NLP
-_**A complete process of colleting rawdata from spiders of online webpages to accomplishing preliminary Natural Language Processing by topical docu clustering model**_
+_**A complete process of collecting data from spiders of online webpages to accomplish preliminary Natural Language Processing by topical docu clustering model.**_
 
 _Primary Language: `Python`, `HTML`, `css`_
 
