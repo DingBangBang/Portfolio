@@ -5,8 +5,9 @@ _Primary Language: `Python`_
 
 _Core file: [Sales_19Dec_overview.ipynb](Sales_19Dec_overview.ipynb)_
 
-_friendly_format for scan: [forshare_Sales_19Dec_overview.pdf](forvisit/forshare_Sales_19Dec_overview.pdf)_
+_friendly format for scan: [forshare_Sales_19Dec_overview.pdf](forvisit/forshare_Sales_19Dec_overview.pdf)_
 
+_friendly link for scan if rendering slowly or failed here: [open in nbviewer](https://nbviewer.org/github/DingBangBang/Portfolio/blob/main/Portfolio1_sales_EDA/Sales_19Dec_overview.ipynb)_
 # Nouns
 > TMall: One of the largest E-Commerce platforms in China, belonging to Alibaba Group.
 
