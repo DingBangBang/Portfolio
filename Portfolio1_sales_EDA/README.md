@@ -1,5 +1,5 @@
 # Sales Data Analysis
-**_Exploration Analysis of TMall sales data from Kaggle including Double11._**
+**_In-depth Analysis of Online shop cosmetics sales data from Kaggle._**
 
 _Primary Language: `Python`_
 
@@ -8,10 +8,7 @@ _Core file: [Sales_19Dec_overview.ipynb](Sales_19Dec_overview.ipynb)_
 _friendly format for scan: [forshare_Sales_19Dec_overview.pdf](forvisit/forshare_Sales_19Dec_overview.pdf)_
 
 _friendly link for scan if rendering slowly or failed here: [open in nbviewer](https://nbviewer.org/github/DingBangBang/Portfolio/blob/main/Portfolio1_sales_EDA/Sales_19Dec_overview.ipynb)_
-# Nouns
-> TMall: One of the largest E-Commerce platforms in China, belonging to Alibaba Group.
 
-> Double11: The most popular shopping festival around the country launched by Taobao.com which belongs to Alibaba as well. something like Black Friday each year in the international range.
 
 # RawData
 - columns:
@@ -20,12 +17,12 @@ _friendly link for scan if rendering slowly or failed here: [open in nbviewer](h
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 - time range: Oct. 2019 - Feb. 2020
 - total rows: 3,000,000 rows per month * 5 months = 15 million
-- Data saved in a separete .csv file every month
-- description from Kaggle about data file
+- Data saved in a separate .csv file every month
+- description from Kaggle about the datafile
 ```
 This file contains behavior data for 5 months (Oct 2019 – Feb 2020) from a medium cosmetics online store.
-Each row in the file represents an event. All events are related to products and users. Each event is like many-to-many relation between products and users.
-Data collected by __*Open CDP*__ project. Feel free to use open source customer data platform.
+Each row in the file represents an event. All events are related to products and users. Each event is like many-to-many relations between products and users.
+Data collected by __*Open CDP*__ project. Feel free to use an open source customer data platform.
 ```
 
 # Mindmap v1.0
