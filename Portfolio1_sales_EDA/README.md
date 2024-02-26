@@ -18,7 +18,8 @@ _friendly link for scan if rendering slowly or failed here: [open in nbviewer](h
 - time range: Oct. 2019 - Feb. 2020
 - total rows: 3,000,000 rows per month * 5 months = 15 million
 - Data saved in a separate .csv file every month
-- description from Kaggle about the datafile
+- link of this dataset: [Jump to Kaggle url](https://www.kaggle.com/datasets/mkechinov/ecommerce-events-history-in-cosmetics-shop/data)
+- description from Kaggle about the datasets
 ```
 This file contains behavior data for 5 months (Oct 2019 – Feb 2020) from a medium cosmetics online store.
 Each row in the file represents an event. All events are related to products and users. Each event is like many-to-many relations between products and users.
