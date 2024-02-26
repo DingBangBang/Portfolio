@@ -21,6 +21,12 @@ _friendly link for scan if rendering slowly or failed here: [open in nbviewer](h
 - time range: Oct. 2019 - Feb. 2020
 - total rows: 3,000,000 rows per month * 5 months = 15 million
 - Data saved in a separete .csv file every month
+- description from Kaggle about data file
+```
+This file contains behavior data for 5 months (Oct 2019 – Feb 2020) from a medium cosmetics online store.
+Each row in the file represents an event. All events are related to products and users. Each event is like many-to-many relation between products and users.
+Data collected by __*Open CDP*__ project. Feel free to use open source customer data platform.
+```
 
 # Mindmap v1.0
 ![mindmap](mindmap_beta.png)
