@@ -24,3 +24,6 @@ secret.txt
 
 # 不忽略特定目录下的文件
 #!src/config.ini
+.DS_Store
+__pycache__/
+*.pyc
