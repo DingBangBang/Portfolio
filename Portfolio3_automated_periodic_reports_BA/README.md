@@ -35,5 +35,5 @@ _Core File: [retail_weekly_monthly_report_auto.ipynb](retail_weekly_monthly_repo
 ```
 
 # Screenshot of Output
-[Weekly Report](Portfolio3_automated_periodic_reports_BA/CEX_automated_weekly_report.jpg)
-[Monthly Report](Portfolio3_automated_periodic_reports_BA/CEX_automated_monthly_report.jpg)
+[Weekly Report](./CEX_automated_weekly_report.jpg)
+[Monthly Report](./CEX_automated_monthly_report.jpg)
