@@ -33,3 +33,7 @@ _Core File: [retail_weekly_monthly_report_auto.ipynb](retail_weekly_monthly_repo
 5. AUTO SCREENSHOT
 6. SAVE TO A EXCEL ATTACHMENT
 ```
+
+#Screenshot of Output
+[Weekly Report](Portfolio3_automated_periodic_reports_BA/Novadax_automated_weekly_report.jpg)
+[Monthly Report](Portfolio3_automated_periodic_reports_BA/Novadax_automated_weekly_report.jpg)
