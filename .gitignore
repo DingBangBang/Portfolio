@@ -1,29 +1,54 @@
-# 忽略编译产生的临时文件
-*.o
-*.class
-*.xlsx
-*.xls
-*.word
-*.csv
-*.txt
-*.pyc
-*.out
-*.err
-*.cache
-*.idea
-*.exe
-*.jar
-*.war
+# ============================================================
+# Portfolio — global ignore rules
+# 仅忽略「本地环境 / 缓存 / 临时产物」；需要长期展示的小体量
+# 样例数据（CSV 等）请显式保留、勿被误伤。
+# ============================================================
 
-# 忽略日志文件
-/logs/
-/data/
+# ----- Python 虚拟环境 -----
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
 
-# 忽略敏感信息文件
-secret.txt
-
-# 不忽略特定目录下的文件
-#!src/config.ini
-.DS_Store
+# ----- Python 缓存 / 构建产物 -----
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ----- Jupyter 缓存 -----
+.ipynb_checkpoints/
+
+# ----- 日志 / 临时输出 -----
+*.log
+logs/
+tmp/
+*.tmp
+*.cache
+.virtual_documents/
+
+# ----- 编辑器 / 操作系统 -----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ----- 本地大文件（原始数据集 / 模型权重 / 压缩包），勿入库 -----
+data/
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.pkl
+*.h5
+*.pt
+*.ckpt

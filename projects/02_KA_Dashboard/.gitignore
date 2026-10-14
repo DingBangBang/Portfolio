@@ -1,28 +1,24 @@
-# 忽略编译产生的临时文件
-*.o
-*.class
-*.xlsx
-*.xls
-*.word
-*.csv
-*.txt
-*.pyc
-*.out
-*.err
-*.cache
-*.idea
-*.exe
-*.jar
-*.war
+# ----- 虚拟环境 -----
+.venv/
+venv/
+env/
+.env
+.env.*
 
+# ----- 缓存 -----
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
 
-# 忽略日志文件
-/logs/
-/data/
+# ----- 日志 / 临时输出 -----
+*.log
+logs/
+tmp/
+*.tmp
 
-
-# 忽略敏感信息文件
-secret.txt
-
-# 不忽略特定目录下的文件
-#!src/config.ini
+# ----- 编辑器 / 操作系统 -----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

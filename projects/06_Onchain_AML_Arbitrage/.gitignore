@@ -1,0 +1,24 @@
+# ----- 虚拟环境 -----
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# ----- 缓存 -----
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+
+# ----- 日志 / 临时输出 -----
+*.log
+logs/
+tmp/
+*.tmp
+
+# ----- 编辑器 / 操作系统 -----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
