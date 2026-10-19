@@ -688,9 +688,12 @@ fact_cta_experiments / fact_ab_assignments                —— 实验级事实
 
 > 中英双版长图由 Playwright 滚动拼接，均为 1440 × 23,150：
 
-[中文看板]()
+[中文看板](projects/04_Customer_Analysis_BA/reports/CEX-Customer-Analytics-10-20-2026_05_26_part1.png)
+[中文看板 - 后半部分](projects/04_Customer_Analysis_BA/reports/CEX-Customer-Analytics-10-20-2026_05_26_part2.png)
 
-[English dashboard]()
+[English dashboard](projects/04_Customer_Analysis_BA/reports/CEX-Customer-Analytics-10-20-2026_05_25_part1.png)
+[English dashboard - Part2](projects/04_Customer_Analysis_BA/reports/CEX-Customer-Analytics-10-20-2026_05_25_part2.png)
+[English dashboard - Part3](projects/04_Customer_Analysis_BA/reports/CEX-Customer-Analytics-10-20-2026_05_25_part3.png)
 
 ### 10.2 三源通知（均附带中英双版直达链接）
 
