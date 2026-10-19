@@ -146,31 +146,40 @@ def main() -> int:
     healthy = wait_health(args.port)
     status["steps"]["dashboard"] = {"healthy": healthy, "url": settings.DASHBOARD_URL}
 
-    screenshot_path = settings.SCREENSHOT_PATH
-    shot = {"ok": False, "reason": "dashboard unhealthy"}
+    shot_zh = {"ok": False, "reason": "dashboard unhealthy"}
+    shot_en = {"ok": False, "reason": "dashboard unhealthy"}
     if healthy:
-        shot = notifier.capture_screenshot(settings.DASHBOARD_URL, screenshot_path)
-    status["steps"]["screenshot"] = shot
+        shot_zh = notifier.capture_screenshot(settings.DASHBOARD_URL_ZH, settings.SCREENSHOT_PATH)
+        shot_en = notifier.capture_screenshot(settings.DASHBOARD_URL_EN, settings.SCREENSHOT_PATH_EN)
+        if shot_zh.get("ok"):
+            import shutil as _shutil
+            _shutil.copyfile(settings.SCREENSHOT_PATH, settings.SCREENSHOT_LEGACY)
+    status["steps"]["screenshot"] = {"zh": shot_zh, "en": shot_en}
 
+    links = {"zh": settings.DASHBOARD_URL_ZH, "en": settings.DASHBOARD_URL_EN}
     subject = ("[CEX Analytics] " + ("SUCCESS" if run_ok else "FAILED") +
                f" · {datetime.now():%Y-%m-%d}")
     html_body = notifier.build_html(run_ok, kpis, insights, status["errors"],
                                     tables={"Attribution": (results.get("attribution") or {}).get("table") if results.get("attribution") else None,
                                             "Channel performance": results.get("shapley") if isinstance(results.get("shapley"), pd.DataFrame) else None,
                                             "A/B test": (results.get("ab") or {}).get("table") if results.get("ab") else None},
-                                    screenshot=screenshot_path if shot.get("ok") else None)
+                                    screenshot=settings.SCREENSHOT_PATH if shot_zh.get("ok") else None,
+                                    screenshot_en=settings.SCREENSHOT_PATH_EN if shot_en.get("ok") else None,
+                                    links=links)
     summary = notifier.build_summary(run_ok, kpis, insights)
     status["summary"] = summary
     if not args.no_notify:
         status["steps"]["mac_notify"] = notifier.mac_notify(
             "CEX Analytics pipeline", "Succeeded" if run_ok else "Failed",
-            "daily run", summary=summary)
+            "daily run", summary=summary, links=links)
     if not args.no_lark:
-        status["steps"]["lark"] = notifier.lark_notify(summary, run_ok, kpis, insights)
+        status["steps"]["lark"] = notifier.lark_notify(summary, run_ok, kpis, insights, links=links)
     if healthy and not args.no_browser:
-        status["steps"]["browser"] = notifier.open_browser(settings.DASHBOARD_URL)
+        status["steps"]["browser"] = notifier.open_browser(links["zh"])
     if not args.no_email:
-        status["steps"]["email"] = notifier.send_email(subject, html_body, screenshot=screenshot_path)
+        status["steps"]["email"] = notifier.send_email(
+            subject, html_body, screenshot=settings.SCREENSHOT_PATH,
+            screenshot_en=settings.SCREENSHOT_PATH_EN)
 
     status["finished_at"] = datetime.now().isoformat(timespec="seconds")
     status["ok"] = run_ok
@@ -181,7 +190,7 @@ def main() -> int:
         json.dumps(status, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
     print(json.dumps({"ok": run_ok, "kpis": kpis, "errors": status["errors"],
-                      "screenshot": shot.get("ok"),
+                      "screenshot": {"zh": shot_zh.get("ok"), "en": shot_en.get("ok")},
                       "email": status["steps"].get("email", {})}, ensure_ascii=False, indent=2))
     return 0 if run_ok else 1
 

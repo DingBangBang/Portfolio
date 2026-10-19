@@ -5,11 +5,113 @@
 **_面向中心化交易所（CEX）的用户全生命周期分析蓝图：从注册转化漏斗、RFM 细分、流失生存分析，到 LTV 预测、营销归因与增量 ROI 测算。_**
 
 - 主要语言：`Python` `SQL`
-- 状态：**规划中**。本 README 是完整实现蓝图（背景 / 思路 / 数据 / 步骤 / 开发文档 / 交付物），代码与数据将按本文逐步落地。
+- 状态：**已实现并通过本地验证**。数据、dbt、算法、看板、三源通知与 Docker 镜像均已落地；快速开始见第 1 节，运行结果见第 8 节。
 
 ---
 
-## 1. 项目背景
+## 1. 快速开始与部署
+
+> 以下命令全部在 `projects/04_Customer_Analysis_BA/` 目录下执行；环境已隔离为 `customer_analysis_ba`，不会污染全局 Python。
+
+### 1.1 一次性环境准备
+
+```bash
+cd projects/04_Customer_Analysis_BA
+conda create -n customer_analysis_ba python=3.10 -y
+conda activate customer_analysis_ba
+pip install -r requirements.txt
+
+# macOS 若出现 scipy dlopen 报错（__thread_bss），降级到兼容版本：
+# pip install --force-reinstall --no-deps scipy==1.13.1
+
+# 可选：LightGBM 在 macOS 需要 libomp；没有则自动回退到 HistGradientBoosting
+# brew install libomp
+
+# 可选：看板截图用 Playwright + 本机 Chrome
+pip install playwright   # 已安装 Chrome 时无需再下载 chromium
+```
+
+### 1.2 生成数据 → 装载 DuckDB → dbt
+
+```bash
+python scripts/generate_mock_data.py          # 16 张表 → data/raw/*.parquet（seed=42）
+python scripts/load_raw_to_duckdb.py          # 建 raw schema 视图 → warehouse.duckdb
+
+cd dbt_project
+DUCKDB_PATH=../warehouse.duckdb dbt run  --profiles-dir .
+DUCKDB_PATH=../warehouse.duckdb dbt test --profiles-dir .
+cd ..
+```
+
+### 1.3 一键跑完整流水线（数据 → dbt → 建模 → 报表 → 通知）
+
+```bash
+python main.py                 # 完整运行（复用已有数据）
+python main.py --regenerate    # 重新生成数据
+python main.py --no-email      # 不发邮件，只写本地预览
+python main.py --skip-dbt      # 复用已构建的 marts
+```
+
+产出：`reports/`（KPI、归因、渠道、LTV、生存分析、实验、预算弹性、data dictionary 链接）、`reports/dashboard_screenshot.png`、`reports/email_preview.html`、`reports/latest_run.json`。
+
+### 1.4 启动看板
+
+```bash
+streamlit run dashboards/app.py
+# http://localhost:8501
+```
+
+### 1.5 Docker 一键启动（看板 + Redis）
+
+```bash
+docker compose up -d --build
+# 看板 http://localhost:8501 ，Redis localhost:6379
+```
+
+> 注意：Docker 镜像只包含看板运行依赖（见 `requirements-docker.txt`），核心算法仍在宿主机 conda 环境运行；`warehouse.duckdb` 通过 volume 挂载。
+
+---
+
+### 1.6 Docker 镜像说明（1.03G 从哪来 / 本地与云端存储 / Windows 一键运行）
+
+**为什么镜像 1.03G（压缩后 224.8MB）？**
+
+| 层 | 内容 | 说明 |
+| --- | --- | --- |
+| 基础层 | `python:3.10-slim` | 约 120MB，Debian slim + Python 运行时 |
+| 系统依赖 | `libgomp1`、`curl` | LightGBM/健康检查所需，几十 MB |
+| Python 依赖 | pandas / numpy / duckdb / pyarrow / streamlit / plotly / matplotlib | 科学计算与可视化轮子体积大，是镜像的主要部分 |
+| 代码与静态资源 | `dashboards/`、`src/`、`config/` 等 | 只有几 MB |
+
+> 镜像使用 `requirements-docker.txt`（只含看板运行依赖），没有把 LightGBM、lifelines、Prophet 等算法依赖打进去；算法在宿主机 conda 环境运行，因此 1.03G 已经是“只跑看板”的较小体积。
+
+**本地与云端存储机制**
+
+- **本地**：镜像层存放在 Docker Desktop 的虚拟磁盘中（macOS 默认在 `~/Library/Containers/com.docker.docker/Data/vms/0/data`），`docker images` 看到的是解压后的 1.03G；
+- **云端**：DockerHub 按层存储并压缩，`latest` 标签约 **224.8MB**，拉取时只下载缺失层；
+- **数据**：`warehouse.duckdb` 与 `reports/` 不打进镜像，通过 volume 挂载，保证数据与算法产物始终是最新的。
+
+**Windows 用户一键运行**
+
+```powershell
+# 1) 安装并启动 Docker Desktop for Windows（WSL2 backend）
+# 2) 拉取镜像
+docker pull bonnie333333333/cex-customer-analytics:latest
+
+# 3) 在项目目录（含 warehouse.duckdb 与 reports/）执行
+docker run -d --name cex-dashboard -p 8501:8501 `
+  -v "${PWD}/warehouse.duckdb:/app/warehouse.duckdb" `
+  -v "${PWD}/reports:/app/reports" `
+  bonnie333333333/cex-customer-analytics:latest
+
+# 4) 打开 http://localhost:8501/?lang=zh 或 ?lang=en
+```
+
+
+
+---
+
+## 2. 项目背景
 
 交易所的增长团队里普遍存在三个「说不清」：
 
@@ -33,7 +135,9 @@
 *   **维度四：产品化与数据资产（回答“如何规模化落地”）**
     *   标签体系构建、A/B 测试实验设计、自动化看板与邮件推送机制。
 
-## 2. 分析框架与实现思路
+---
+
+## 3. 分析框架与实现思路
 
 我按「**先看清 → 再归因 → 再预测 → 再决策**」四层递进来组织全案，避免一上来就堆模型：
 
@@ -55,9 +159,11 @@
 - **相关 ≠ 因果**：凡是「A 导致了 B」的结论，必须经过反事实/随机实验/断点回归等因果方法验证；
 - **服务于决策**：每个分析都要有一个「所以然后呢」的行动建议，否则不进交付物。
 
-## 3. 数据设计
+---
 
-### 3.1 数据来源策略
+## 4. 数据设计与指标体系
+
+### 4.1 数据来源策略
 
 我不直接依赖某一份现成数据，而是**「公开数据集打底 + 合成补齐」**：
 
@@ -69,7 +175,7 @@
 
 > 所有生成脚本会固定随机种子（`random_state`），确保任何人复现得到同一份数据。
 
-### 3.2 数据表（数据字典）
+### 4.2 数据表（数据字典）
 
 下表为 16 张核心表，**每张表 ≥ 1,000 行**，可直接支撑本文所有分析步骤。
 
@@ -92,7 +198,7 @@
 | 15 | `fact_ltv_labels` | LTV 标签 | `user_id, cohort, ltv_30d, ltv_90d, churn_90d` | ~250K | LTV / 流失建模 |
 | 16 | `fact_funnel_snapshot` | 漏斗步骤快照 | `period, step, user_cnt, prev_step_cnt, step_cvr` | ~5K | 漏斗监控 / 归因下钻 |
 
-### 3.3 表关系（简化 ER）
+### 4.3 表关系（简化 ER）
 
 ```
 dim_users (user_id) 1───∞ fact_events
@@ -107,14 +213,12 @@ fact_ads_spend / fact_social_metrics / fact_page_modules  —— 按「日期(+�
 fact_cta_experiments / fact_ab_assignments                —— 实验级事实表
 ```
 
-### 3.4 数据质量校验（上线前必做）
+### 4.4 数据质量校验（上线前必做）
 
 - **一致性**：`GMV(fact_transactions)` 必须等于报表 GMV；漏斗各级人数必须单调递减；
 - **完整性**：`user_id` 外键命中率 ≥ 99.9%；时间戳无未来值；
 - **合理性**：金额 > 0、手续费 ≥ 0、`vip_level` 与交易额分布相符；
 - **去重**：埋点与触点按 `event_id / tp_id` 去重，避免重复计数放大结论。
-
-## 4. 指标体系
 
 | 层级 | 指标 | 定义要点 |
 | --- | --- | --- |
@@ -125,6 +229,8 @@ fact_cta_experiments / fact_ab_assignments                —— 实验级事实
 | 价值 | LTV、P99 用户贡献、RFM 分 | LTV 区分 30d/90d |
 | 流失 | Churn rate、存活概率、流失风险系数 | 结合生存分析 |
 | 营销 | ROI、增量 ROI、iCAC、CPA | 增量口径需剔除自然增长基线 |
+
+---
 
 ## 5. 实现步骤（分阶段落地）
 
@@ -169,6 +275,8 @@ fact_cta_experiments / fact_ab_assignments                —— 实验级事实
 
 **Phase 7 · 可视化与交付**
 24. 汇总为看板 + 报告 + 可复用代码库，并沉淀方法论文档。
+
+---
 
 ## 6. 关键分析方法与技术决策
 
@@ -309,162 +417,9 @@ fact_cta_experiments / fact_ab_assignments                —— 实验级事实
 - **助攻价值**：`(马尔可夫贡献度 − 末次点击贡献度) / 末次点击贡献度`，输出形如「品牌词与某社媒的助攻价值比末次点击模型高 X%」的结论；
 - **方法论提醒**：Markov 与 Shapley 回答的是不同问题（见 6.9），汇报时务必写清用的是哪一种、误差如何定义。
 
-## 7. 开发文档（工程结构 / 环境 / 运行）
-
-### 7.1 规划目录结构
-
-```
-04_Customer_Analysis_BA/
-├── README.md / README_EN.md      # 本蓝图（中/英）
-├── data/
-│   ├── schema.sql                # 建表 DDL
-│   ├── generate_data.py          # 固定随机种子的合成数据脚本
-│   └── sample/                   # 小体量样例（原数据大文件 gitignore）
-├── sql/
-│   ├── dws_user_wide.sql         # 用户级宽表
-│   └── metrics_dict.sql          # 指标口径
-├── src/
-│   ├── funnel/                   # 转化漏斗（6.2）
-│   ├── segmentation/             # RFM + 降维分群（6.1）
-│   ├── attribution/              # 多归因模型 + Shapley（6.9 / 6.10）
-│   ├── survival/                 # Cox 生存分析（6.7）
-│   ├── ltv/                      # BG/NBD 与机器学习（6.5）
-│   ├── experiment/               # 全因子 / A/B（6.13 / 6.15）
-│   └── budget/                   # 预算弹性与模拟器（6.18）
-├── notebooks/                    # 探索与报告
-├── reports/                      # 交付产物（图表 / 报告）
-└── requirements.txt
-```
-
-### 7.2 环境与依赖
-
-- Python ≥ 3.10；依赖：`pandas` `numpy` `scipy` `scikit-learn` `statsmodels` `lifelines`（Cox）`lifetimes`（BG/NBD）`lightgbm` `prophet` `markovchain`/自实现 `umap-learn` `matplotlib` `plotly` `openpyxl`；
-- 数据库：本地 `MySQL` / `PostgreSQL`（用 `sql/` 下的 DDL 建表）。
-
-### 7.3 运行方式（规划）
-
-```bash
-# 1. 建表并生成数据
-mysql -u <user> -p < data/schema.sql
-python data/generate_data.py --seed 42
-
-# 2. 各模块
-python src/funnel/run.py
-python src/segmentation/run.py
-python src/attribution/run.py
-python src/survival/run.py
-python src/ltv/run.py
-python src/budget/simulator.py
-```
-
-> 说明：以上为规划接口，实际文件将随 Phase 0~7 逐步补齐；未完成处会以 `TODO` 标注。
-
-## 8. 预期 Insights（示例结论位）
-
-> 以下为模板与待填项，正式执行后回填真实数字。
-
-- 漏斗最大漏损点：`TODO`（预计在「注册 → 完成 KYC」或「KYC → 首次入金」）；
-- 高流失人群的先行前兆行为：`TODO`（预计与「未查看教程 / 未点击首次任务」相关）；
-- LTV 最高的分群与占比：`TODO`；
-- 被末次点击低估的渠道：`TODO`（预计品牌词与社媒助攻被低估）；
-- 疑似注水渠道：`TODO`；
-- 预算最优分配建议：`TODO`（预计受边际递减约束）。
-
-## 9. 风险、边界与 TODO
-
-- **数据边界**：合成数据能验证方法链路，但不能替代真实业务结论；正式使用需接入真实数仓并重新校准分布；
-- **因果边界**：无真实随机实验时，准实验结论需标注假设（平行趋势等），避免过度解读；
-- **归因边界**：多归因模型对「路径缺失 / 跨设备」敏感，需先评估数据完整度；
-- **TODO**：`[ ]` 待补真实数据集、`[ ]` 待补代码、`[ ]` 待补看板与报告产物。
-
-## 10. 交付物清单
-
-| 类别 | 产物 | 状态 |
-| --- | --- | --- |
-| 文档 | 本 README（中/英）、数据字典、指标口径说明 | ✅ 蓝图完成 |
-| 数据 | 16 张核心表 + 合成脚本（固定种子） | ⏳ TODO |
-| 代码 | `src/` 下 7 大分析模块 | ⏳ TODO |
-| 报告 | 增长归因报告、实验与因果结论集、LTV 分层清单 | ⏳ TODO |
-| 看板 | 漏斗 / 分群 / 渠道 / 预算弹性看板 | ⏳ TODO |
-| 工具 | 管理层「假设模拟器」 | ⏳ TODO |
-
-## 11. 参考数据集与延伸阅读
-
-- Kaggle：*eCommerce events history in cosmetics shop*（行为流分布参考）；
-- Criteo / 公开多渠道归因数据集（触点序列参考）；
-- 公开的加密交易所交易 / 充提样例数据（金额与时间分布参考）；
-- 方法参考：BG/NBD（*Counting Your Customers the Easy Way*）、Cox 比例风险模型、Shapley 值归因、Markov 移除效应、Prophet 时间序列分解。
-
 ---
 
-> 备注：本项目的分析框架同样适用于其它「拉新 → 激活 → 交易 → 留存 → 复购」型业务，替换 `dim_users` 与事实表口径即可复用。
-
----
-
-## 12. 快速开始（Clone 后逐步复现）
-
-> 以下命令全部在 `projects/04_Customer_Analysis_BA/` 目录下执行；环境已隔离为 `customer_analysis_ba`，不会污染全局 Python。
-
-### 12.1 一次性环境准备
-
-```bash
-cd projects/04_Customer_Analysis_BA
-conda create -n customer_analysis_ba python=3.10 -y
-conda activate customer_analysis_ba
-pip install -r requirements.txt
-
-# macOS 若出现 scipy dlopen 报错（__thread_bss），降级到兼容版本：
-# pip install --force-reinstall --no-deps scipy==1.13.1
-
-# 可选：LightGBM 在 macOS 需要 libomp；没有则自动回退到 HistGradientBoosting
-# brew install libomp
-
-# 可选：看板截图用 Playwright + 本机 Chrome
-pip install playwright   # 已安装 Chrome 时无需再下载 chromium
-```
-
-### 12.2 生成数据 → 装载 DuckDB → dbt
-
-```bash
-python scripts/generate_mock_data.py          # 16 张表 → data/raw/*.parquet（seed=42）
-python scripts/load_raw_to_duckdb.py          # 建 raw schema 视图 → warehouse.duckdb
-
-cd dbt_project
-DUCKDB_PATH=../warehouse.duckdb dbt run  --profiles-dir .
-DUCKDB_PATH=../warehouse.duckdb dbt test --profiles-dir .
-cd ..
-```
-
-### 12.3 一键跑完整流水线（数据 → dbt → 建模 → 报表 → 通知）
-
-```bash
-python main.py                 # 完整运行（复用已有数据）
-python main.py --regenerate    # 重新生成数据
-python main.py --no-email      # 不发邮件，只写本地预览
-python main.py --skip-dbt      # 复用已构建的 marts
-```
-
-产出：`reports/`（KPI、归因、渠道、LTV、生存分析、实验、预算弹性、data dictionary 链接）、`reports/dashboard_screenshot.png`、`reports/email_preview.html`、`reports/latest_run.json`。
-
-### 12.4 启动看板
-
-```bash
-streamlit run dashboards/app.py
-# http://localhost:8501
-```
-
-### 12.5 Docker 一键启动（看板 + Redis）
-
-```bash
-docker compose up -d --build
-# 看板 http://localhost:8501 ，Redis localhost:6379
-```
-
-> 注意：Docker 镜像只包含看板运行依赖（见 `requirements-docker.txt`），核心算法仍在宿主机 conda 环境运行；`warehouse.duckdb` 通过 volume 挂载。
-
----
-
-## 13. 工程实现（真实目录）
+## 7. 工程实现（真实目录）
 
 ```
 04_Customer_Analysis_BA/
@@ -501,11 +456,11 @@ docker compose up -d --build
 
 ---
 
-## 14. 运行结果与核心 Insights（seed=42，20,000 用户 / 240 天）
+## 8. 运行结果与核心 Insights
 
 > 数据为**合成数据**，用于验证方法与工程链路；结论口径与真实业务一致，但数值不代表真实经营结果。
 
-### 14.1 数据与数仓
+### 8.1 数据与数仓
 
 | 表 | 行数 | 表 | 行数 |
 | --- | ---: | --- | ---: |
@@ -521,7 +476,7 @@ docker compose up -d --build
 - `dbt run`：**27/27** 模型成功；`dbt test`：**30/30** 通过（唯一性、非空、枚举、外键 + 4 个业务单测）；
 - 全量 GMV：**$78,755,325.65**；手续费收入：**$78,755.33**。
 
-### 14.2 核心 KPI（自动写入 `reports/kpi_summary.json`）
+### 8.2 核心 KPI（自动写入 `reports/kpi_summary.json`）
 
 | 指标 | 数值 | 指标 | 数值 |
 | --- | ---: | --- | ---: |
@@ -531,7 +486,7 @@ docker compose up -d --build
 | 平均 LTV(90d) | $3.23 | 90 天流失率 | **62.21%** |
 | AOV | $1,356.40 | 人均 GMV（交易用户） | $10,346.21 |
 
-### 14.3 转化漏斗（最后一天快照）
+### 8.3 转化漏斗（最后一天快照）
 
 | 步骤 | 人数 | 相对上一步 CVR |
 | --- | ---: | ---: |
@@ -543,7 +498,7 @@ docker compose up -d --build
 
 > **最大漏损在 KYC → 首次入金**：流失 **5,724 人**。这是最值得优先优化的环节。
 
-### 14.4 RFM + 降维分群
+### 8.4 RFM + 降维分群
 
 - K-Means 自动选 `k=3`（轮廓系数 **0.3746**，PCA 两维解释 **84.72%** 方差）；
 - 三个行为分群：
@@ -554,7 +509,7 @@ docker compose up -d --build
 | 1 | 4,294 | $6,932.41 | $5.80 | 主力大众人群 |
 | 2 | 2,512 | $17,328.26 | $14.26 | 高价值核心人群，重点维护 |
 
-### 14.5 四归因模型对比（首次 / 末次 / 位置 / 马尔可夫）
+### 8.5 四归因模型对比（首次 / 末次 / 位置 / 马尔可夫）
 
 | 渠道 | 首次归因 | 末次归因 | 位置归因 | 马尔可夫 | 马尔可夫 vs 末次 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -570,7 +525,7 @@ docker compose up -d --build
 - **误差定义**：5 折重采样的渠道份额标准差（`stability_std`，均在 0.004~0.009，稳定）+ 折均值与全量份额的平均绝对偏差（`reconstruction_error`，均 < 0.0002）；
 - **结论**：末次点击显著低估 affiliate / kol / telegram 的“助攻价值”，同时高估 organic / referral；因此主归因采用**马尔可夫移除效应**，末次点击只作为对照基线。
 
-### 14.6 渠道质量分级与 Shapley 归因
+### 8.6 渠道质量分级与 Shapley 归因
 
 | 渠道 | Shapley 份额 | ROI | CPA | 分级 | 注水标记 |
 | --- | ---: | ---: | ---: | :---: | :---: |
@@ -585,7 +540,7 @@ docker compose up -d --build
 
 > Shapley 回答「有了它平均好多少」，马尔可夫回答「没有它行不行」；这里两者交叉验证，指向同一批高价值渠道（organic / referral）与高 CPA 渠道（affiliate / kol / telegram）。
 
-### 14.7 LTV 预测：LightGBM vs BG/NBD
+### 8.7 LTV 预测：LightGBM vs BG/NBD
 
 | 模型 | MAE | RMSE | Spearman | 训练 / 测试 |
 | --- | ---: | ---: | ---: | ---: |
@@ -595,7 +550,7 @@ docker compose up -d --build
 - 采用**时间外样本**切分（按注册日期 80/20），不是随机切分；
 - **技术结论**：点预测用 LightGBM；BG/NBD 的价值在 `P(alive)` 与「期望购买次数」，用于流失判定与冷启动兜底，而不是直接拼 MAE。
 
-### 14.8 生存分析（Cox 比例风险）
+### 8.8 生存分析（Cox 比例风险）
 
 > 事件 = 首次入金；`hazard_ratio > 1` 表示相对基准渠道（affiliate）更快完成入金。
 
@@ -610,7 +565,7 @@ docker compose up -d --build
 | register_device_type = ios | 1.200 | <0.001 |
 | register_channel = kol | 1.098 | 0.147（不显著） |
 
-### 14.9 实验与因果
+### 8.9 实验与因果
 
 **A/B 测试（注册 CTA）**
 
@@ -633,13 +588,13 @@ docker compose up -d --build
 - 随机森林重要性排序：`cta_color_red` 0.174、`cta_color_green` 0.154、`cta_copy_claim_bonus` 0.134；
 - **注意**：重要性高 ≠ 边际 CVR 高（树模型会捕捉交互与不平衡），两者需结合看。
 
-### 14.10 季度预算弹性
+### 8.10 季度预算弹性
 
 - 方法：`conversions ~ log(spend)` 分渠道回归 + STL 分解（趋势/季节/残差）；
 - 当前每日边际转化/美元：affiliate **0.2386**、twitter 0.2310、telegram 0.2133、kol 0.2100、organic 0.2078、referral 0.1914、brand_search 0.1885、google_ads 0.1872；
 - **关键提醒**：affiliate 边际转化最高，但 ROI 最低（0.49%）、CPA 最高（$1,680）——说明它带来的是“便宜但低价值”的转化，**不能只用边际转化做预算决策**，必须结合 LTV/ROI。
 
-### 14.11 活动 / 空投增量 ROI（DID）
+### 8.11 活动 / 空投增量 ROI（DID）
 
 | 活动 | 参与人数 | 增量收入 | 增量 ROI |
 | --- | ---: | ---: | ---: |
@@ -651,7 +606,7 @@ docker compose up -d --build
 
 > 方法：参与者 vs 同渠道非参与者，比较活动前/后 4 周人均交易额，做双重差分（DID）；结果表明多数活动**没有跑赢自然增长基线**，只有少数渠道活动有正增量——这正是“看总收益会高估活动效果”的例证。
 
-### 14.12 核心洞察汇总（data-driven）
+### 8.12 核心洞察汇总（data-driven）
 
 1. **最大漏损在 KYC → 首次入金（流失 5,724 人，CVR 59.55%）**：优先做首充奖励、简化入金流程、对已 KYC 未入金人群定向触达；
 2. **90 天流失率 62.21%**：需要建立沉默用户召回机制（按 RFM 的 at_risk / hibernating 分层）；
@@ -663,64 +618,7 @@ docker compose up -d --build
 
 ---
 
-## 15. 开发文档与过程记录
-
-| 文档 | 内容 |
-| --- | --- |
-| [docs/development_log.md](./docs/development_log.md) | 技术决策、Bug 发现与修复（索引长度、缺失字段、scipy 二进制、BG/NBD 收敛、Markov 退化等） |
-| [docs/data_dictionary.md](./docs/data_dictionary.md) / [EN](./docs/data_dictionary_EN.md) | 16 张表的字段与类型（从实际 Parquet 自动生成） |
-| [docs/scheduling.md](./docs/scheduling.md) | cron / launchd 配置（默认保持手动触发） |
-| [reports/insights.md](./reports/insights.md) | 每次运行自动生成的洞察与建议 |
-| [reports/latest_run.json](./reports/latest_run.json) | 最近一次运行的步骤、错误、KPI、通知状态 |
-
-### 15.1 关键 Bug 与修复（摘要）
-
-1. **`ValueError: cannot add indices of unequal length`**：`pd.Series(base)` 长度为 1，与 N 长度 timedelta 相加失败 → 改为先生成 DatetimeIndex 再包 Series；
-2. **`KeyError: event_time`**：行为序列 SQL 漏选 `event_time` → 补字段；
-3. **scipy `__thread_bss` dlopen 失败**（macOS 27 / arm64）：scipy 1.15.3 wheel 不兼容 → 降级 `scipy==1.13.1`；
-4. **BG/NBD 不收敛**：penalizer 过小 → 改为 0.5/1.0/2.0 自动重试；
-5. **马尔可夫归因退化**（七成渠道为 0）：原实现把流量“改道”而非“切断” → 改为删除渠道后将其流入/流出全部导向 NULL，再算吸收概率；
-6. **BG/NBD 的 CLV 与 LTV 口径不一致**：Gamma-Gamma 输出的是交易额，而 LTV 定义是手续费 → 乘 0.1% 费率后再比较；
-7. **LightGBM 缺 libomp**：`brew install libomp` 后恢复；同时保留 `HistGradientBoosting` 作为无 libomp 的兜底。
-
----
-
-## 16. 交付物清单（实际产出）
-
-| 类别 | 产物 | 状态 |
-| --- | --- | :---: |
-| 环境 | `customer_analysis_ba`（Python 3.10.22） | ✅ |
-| 数据 | `scripts/generate_mock_data.py` + 16 张 Parquet（seed=42） | ✅ |
-| 数仓 | `warehouse.duckdb` + raw/staging/intermediate/marts | ✅ |
-| dbt | 27 个模型 + 30 个测试 | ✅ 全部通过 |
-| 算法 | `src/modeling.py`（§6 全部方法，含 4 归因模型） | ✅ |
-| 分析 | `src/analysis.py`（KPI / insights / 报表导出） | ✅ |
-| 编排 | `main.py`（数据→dbt→建模→报表→通知） | ✅ |
-| 看板 | `dashboards/app.py`（Streamlit + Redis 缓存） | ✅ |
-| 通知 | macOS 通知 / 浏览器 / HTML 邮件 / Playwright 截图 | ✅（邮件待配 SMTP） |
-| 报表 | `reports/` 15 个 CSV/JSON/MD + 看板截图 | ✅ |
-| 文档 | README 中英、开发日志、数据字典中英、定时任务说明 | ✅ |
-| Docker | `Dockerfile` + `docker-compose.yml` | ✅ |
-| 调度 | `scripts/run_daily.sh` + `docs/scheduling.md` | ✅（手动触发） |
-
----
-
-## 17. 看板截图
-
-> 由 Playwright 自动截取本次运行成功的 Streamlit 实时看板（1440×2200）：
-
-![Streamlit dashboard](./reports/dashboard_screenshot.png)
-
----
-
-## 18. 已知边界与后续计划
-
-- 数据为合成数据，结论用于验证方法与工程链路；接真实数仓时只需替换 `data/raw` 与 `raw` 层视图，dbt 与算法无需改动；
-- 邮件发送需配置 `.env` 中的 `SMTP_HOST / SMTP_USER / SMTP_PASSWORD`；未配置时自动写 `reports/email_preview.html`；
-- DockerHub 推送需先 `docker login`；
-- 可选升级：Prophet（替代 STL）、UMAP（替代 PCA）、真实广告/链上 API 抓取。
-
-### 14.13 深度复查新增结果（6.1–6.19 全覆盖）
+### 8.13 深度复查新增结果（6.1–6.19 全覆盖）
 
 | 模块 | 结果 |
 | --- | --- |
@@ -734,11 +632,11 @@ docker compose up -d --build
 
 ---
 
-## 19. 深度复查：README 6.1–6.19 ↔ 代码 ↔ 看板逐项对照
+## 9. 深度复查：README 6.1–6.19 ↔ 代码 ↔ 看板
 
 > 复查结论：**19/19 全部有计算逻辑、图表、核心结论与字段定义**。原看板仅有 7 个分页、覆盖不足一半模块；本次已重构为单页数据故事并全部补齐。
 
-### 19.1 对照表
+### 9.1 对照表
 
 | # | 业务点 | 计算函数（`src/modeling.py`） | 看板锚点 | 产物（`reports/results/`） |
 | --- | --- | --- | --- | --- |
@@ -762,7 +660,7 @@ docker compose up -d --build
 | 6.18 | 预算弹性 + 模拟器 | `budget_elasticity` + `simulate_budget` | `#s618` | `budget_elasticity.csv` / `budget_decomposition.csv` |
 | 6.19 | OKR 归因剥离 | `okr_attribution` | `#s619` | `okr_attribution.csv` |
 
-### 19.2 数据缺口与升级方案（当前无模块报错）
+### 9.2 数据缺口与升级方案（当前无模块报错）
 
 | 6.x | 缺少什么数据 | 影响 | 当前替代方案 | 建议补充 |
 | --- | --- | --- | --- | --- |
@@ -774,7 +672,7 @@ docker compose up -d --build
 
 > 以上均为**数据增强项，不是代码报错**；19 个模块当前全部可运行、可出图、可出结论。
 
-### 19.3 看板与通知改造（本次）
+### 9.3 看板与通知改造（本次）
 
 - **单页滚动**：20 个区块（00 总览 + 6.1–6.19），侧边栏锚点链接 + `scroll-behavior: smooth` 平滑跳转，不再分页；
 - **每个区块三件套**：图表 + 加粗业务结论 + 字段定义与解读；
@@ -784,35 +682,118 @@ docker compose up -d --build
 
 ---
 
-## 20. 本次迭代交付补充（看板重构 + 通知 + Docker）
+## 10. 看板、通知与 Docker 镜像
 
-| 类别 | 产物 | 验证结果 |
-| --- | --- | --- |
-| 看板 | 单页 **20 个区块**（00 总览 + 6.1–6.19），侧边栏锚点平滑滚动 | Playwright：**20/20 锚点**；点击 6.19 后 `stMain.scrollTop` 从 0 → **21,884** |
-| 可视化 | 每个区块「图表 + 加粗结论 + 字段定义」 | 19/19 覆盖，正文约 **13,500** 字符 |
-| 产物 | `reports/results/` 下 **55 个** CSV/JSON | 全部生成 |
-| macOS 通知 | `terminal-notifier`，带一句话业务总结 | ✅ 实测 |
-| Lark | Webhook 文本卡片 | ✅ `StatusCode=0` |
-| 邮件 | Gmail SMTP **465 (SSL)** | ✅ `sent` 到 dingbangchu@gmail.com |
-| 截图 | Playwright 滚动拼接长图 | ✅ **1440 × 23,150**（3.76 MB） |
-| Docker | `bonnie333333333/cex-customer-analytics:latest` | ✅ 本地 build、容器 8502 健康 200、20/20 锚点 |
+### 10.1 看板截图
 
-### 20.1 直接用镜像启动
+> 中英双版长图由 Playwright 滚动拼接，均为 1440 × 23,150：
 
-```bash
-docker run -d --name cex-dashboard -p 8501:8501 \
-  -v "$(pwd)/warehouse.duckdb:/app/warehouse.duckdb" \
-  -v "$(pwd)/reports:/app/reports" \
-  bonnie333333333/cex-customer-analytics:latest
-# http://localhost:8501
-```
+![中文看板](./reports/dashboard_screenshot_zh.png)
 
-> 镜像只包含看板运行依赖；`warehouse.duckdb` 与 `reports/` 通过 volume 挂载，保证数据与算法产物始终是最新的。
+![English dashboard](./reports/dashboard_screenshot_en.png)
 
-### 20.2 一句话总结的通知示例
+### 10.2 三源通知（均附带中英双版直达链接）
 
-`terminal-notifier` 与 Lark 推送的 summary 形如：
+- **macOS**：`terminal-notifier`，通知正文包含一句话总结与 `?lang=zh` / `?lang=en` 两个链接；
+- **Lark**：图文卡片，顶部 6 个核心 KPI（Users / Deposit CVR / GMV / Fee revenue / 90d churn / KYC rate），中部按顺序汇总 Insights，底部两个按钮「中文看板」「English dashboard」；
+- **邮件**：Gmail SMTP 465（SSL），正文顶部两个按钮，正文内嵌中英双版长截图，并附压缩 JPEG 附件。
+
+一句话总结示例：
 
 ```
-20,000 users | deposit 42.1% | GMV $78.8M | 90d churn 62.2% | ⚠ 90 天流失率: 当前 62.21%
+20,000 users | deposit 42.14% | GMV $78.76M | 90d churn 62.21% | ⚠ 90 天流失率: 当前 62.21%
 ```
+
+### 10.3 Docker 镜像
+
+```
+bonnie333333333/cex-customer-analytics:latest
+size: 224.8MB (compressed) / 1.03GB (local)
+digest: sha256:ba4d112552a93f3506b640056bd25e6a1b01e982f9d434e61bc57d0c32e1ced3
+```
+
+
+---
+
+## 11. 交付物清单
+
+| 类别 | 产物 | 状态 |
+| --- | --- | :---: |
+| 环境 | `customer_analysis_ba`（Python 3.10.22） | ✅ |
+| 数据 | `scripts/generate_mock_data.py` + 16 张 Parquet（seed=42） | ✅ |
+| 数仓 | `warehouse.duckdb` + raw/staging/intermediate/marts | ✅ |
+| dbt | 27 个模型 + 30 个测试 | ✅ 全部通过 |
+| 算法 | `src/modeling.py`（§6 全部方法，含 4 归因模型） | ✅ |
+| 分析 | `src/analysis.py`（KPI / insights / 报表导出） | ✅ |
+| 编排 | `main.py`（数据→dbt→建模→报表→通知） | ✅ |
+| 看板 | `dashboards/app.py`（Streamlit + Redis 缓存） | ✅ |
+| 通知 | macOS 通知 / 浏览器 / HTML 邮件 / Playwright 截图 | ✅（邮件待配 SMTP） |
+| 报表 | `reports/` 15 个 CSV/JSON/MD + 看板截图 | ✅ |
+| 文档 | README 中英、开发日志、数据字典中英、定时任务说明 | ✅ |
+| Docker | `Dockerfile` + `docker-compose.yml` | ✅ |
+| 调度 | `scripts/run_daily.sh` + `docs/scheduling.md` | ✅（手动触发） |
+
+---
+
+## 12. 开发文档与过程记录
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/development_log.md](./docs/development_log.md) | 技术决策、Bug 发现与修复（索引长度、缺失字段、scipy 二进制、BG/NBD 收敛、Markov 退化等） |
+| [docs/data_dictionary.md](./docs/data_dictionary.md) / [EN](./docs/data_dictionary_EN.md) | 16 张表的字段与类型（从实际 Parquet 自动生成） |
+| [docs/scheduling.md](./docs/scheduling.md) | cron / launchd 配置（默认保持手动触发） |
+| [reports/insights.md](./reports/insights.md) | 每次运行自动生成的洞察与建议 |
+| [reports/latest_run.json](./reports/latest_run.json) | 最近一次运行的步骤、错误、KPI、通知状态 |
+
+### 12.1 关键 Bug 与修复（摘要）
+
+1. **`ValueError: cannot add indices of unequal length`**：`pd.Series(base)` 长度为 1，与 N 长度 timedelta 相加失败 → 改为先生成 DatetimeIndex 再包 Series；
+2. **`KeyError: event_time`**：行为序列 SQL 漏选 `event_time` → 补字段；
+3. **scipy `__thread_bss` dlopen 失败**（macOS 27 / arm64）：scipy 1.15.3 wheel 不兼容 → 降级 `scipy==1.13.1`；
+4. **BG/NBD 不收敛**：penalizer 过小 → 改为 0.5/1.0/2.0 自动重试；
+5. **马尔可夫归因退化**（七成渠道为 0）：原实现把流量“改道”而非“切断” → 改为删除渠道后将其流入/流出全部导向 NULL，再算吸收概率；
+6. **BG/NBD 的 CLV 与 LTV 口径不一致**：Gamma-Gamma 输出的是交易额，而 LTV 定义是手续费 → 乘 0.1% 费率后再比较；
+7. **LightGBM 缺 libomp**：`brew install libomp` 后恢复；同时保留 `HistGradientBoosting` 作为无 libomp 的兜底。
+
+---
+
+## 13. 风险、边界与后续计划
+
+- **数据边界**：合成数据能验证方法链路，但不能替代真实业务结论；正式使用需接入真实数仓并重新校准分布；
+- **因果边界**：无真实随机实验时，准实验结论需标注假设（平行趋势等），避免过度解读；
+- **归因边界**：多归因模型对「路径缺失 / 跨设备」敏感，需先评估数据完整度；
+- **TODO**：`[ ]` 待补真实数据集、`[ ]` 待补代码、`[ ]` 待补看板与报告产物。
+
+- 数据为合成数据，结论用于验证方法与工程链路；接真实数仓时只需替换 `data/raw` 与 `raw` 层视图，dbt 与算法无需改动；
+- 邮件发送需配置 `.env` 中的 `SMTP_HOST / SMTP_USER / SMTP_PASSWORD`；未配置时自动写 `reports/email_preview.html`；
+- DockerHub 推送需先 `docker login`；
+- 可选升级：Prophet（替代 STL）、UMAP（替代 PCA）、真实广告/链上 API 抓取。
+
+
+---
+
+## 14. 下一步优化建议
+
+1. **补齐真实数据源**：用 Google Ads / Meta Ads API 替换模拟 spend，用链上节点或交易所 API 替换模拟交易；
+2. **升级时间序列与降维**：用 Prophet 替换 STL、用 UMAP 替换 PCA，并对比稳定性与解释性；
+3. **把 DID 升级为随机实验**：对活动做真实分流，或补充 PSM/RDD 所需协变量；
+4. **补齐 Hotjar 热力图与模块级 A/B**：新增 `fact_heatmap_events` 与 `fact_module_ab` 两张表，替代当前的相对可点击率代理；
+5. **生产化 Redis 与调度**：把 5 分钟缓存改为按数据版本失效，并把 `main.py` 拆成 Airflow DAG；
+6. **监控与告警**：为漏斗、首充率、CAC、LTV/CAC 建立阈值告警，异常时自动触发 Lark 卡片；
+7. **模型治理**：为 LightGBM / churn 模型建立时间外回测、特征漂移监控与再训练计划。
+
+
+---
+
+## 15. 参考文献
+
+- Fader, P. S., Hardie, B. G. S., & Lee, K. L. (2005). *Counting Your Customers the Easy Way: An Alternative to the Pareto/NBD Model*. Marketing Science.
+- Cox, D. R. (1972). *Regression Models and Life-Tables*. Journal of the Royal Statistical Society: Series B.
+- Shapley, L. S. (1953). *A Value for n-Person Games*. Contributions to the Theory of Games.
+- Anderl, E., Becker, I., von Wangenheim, F., & Schumann, J. H. (2016). *Mapping the Customer Journey: A Graph-Based Framework for Online Attribution Modeling*. SSRN.
+- Charnes, A., Cooper, W. W., & Rhodes, E. (1978). *Measuring the Efficiency of Decision Making Units*. European Journal of Operational Research.
+- Taylor, S. J., & Letham, B. (2018). *Forecasting at Scale* (Prophet). The American Statistician.
+- dbt Labs. *dbt Documentation*: https://docs.getdbt.com/
+- DuckDB. *DuckDB Documentation*: https://duckdb.org/docs/
+- Streamlit. *Streamlit Documentation*: https://docs.streamlit.io/
+- scikit-learn, lifelines, lifetimes, LightGBM 官方文档。

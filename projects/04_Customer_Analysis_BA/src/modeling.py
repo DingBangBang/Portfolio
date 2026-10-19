@@ -801,6 +801,13 @@ def kaplan_meier(con, top_n: int = 4) -> dict:
         kmf.fit(sub["duration"], event_observed=sub["event"], label=label)
         sf = kmf.survival_function_.reset_index()
         sf.columns = ["time", "survival"]
+        try:
+            ci = kmf.confidence_interval_.reset_index(drop=True)
+            sf["lower"] = ci.iloc[:, 0].to_numpy()
+            sf["upper"] = ci.iloc[:, 1].to_numpy()
+        except Exception:
+            sf["lower"] = sf["survival"]
+            sf["upper"] = sf["survival"]
         sf["group"] = label
         curves.append(sf)
         med = kmf.median_survival_time_

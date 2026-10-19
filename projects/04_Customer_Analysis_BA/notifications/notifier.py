@@ -26,17 +26,19 @@ from config import settings  # noqa: E402
 # ----------------------------------------------------------------
 # macOS notification
 # ----------------------------------------------------------------
-def mac_notify(title: str, message: str, subtitle: str = "", summary: str = "") -> dict:
+def mac_notify(title: str, message: str, subtitle: str = "", summary: str = "", links: dict | None = None) -> dict:
     """Prefer terminal-notifier (rich banner); fall back to osascript."""
     if sys.platform != "darwin":
         return {"ok": False, "reason": "not macOS"}
+    links = links or {"zh": settings.DASHBOARD_URL_ZH, "en": settings.DASHBOARD_URL_EN}
     detail = f"{message} · {summary}" if summary else message
+    detail = detail + chr(10) + "中文: " + links["zh"] + chr(10) + "EN: " + links["en"]
     tn = shutil.which("terminal-notifier")
     if tn:
         try:
             subprocess.run([tn, "-title", title, "-subtitle", subtitle,
                             "-message", detail, "-sound", "Glass",
-                            "-group", "cex-analytics"],
+                            "-group", "cex-analytics", "-open", links["zh"]],
                            check=True, capture_output=True)
             return {"ok": True, "channel": "terminal-notifier"}
         except Exception:
@@ -69,25 +71,56 @@ def build_summary(run_ok: bool, kpis: dict, insights: list | None = None) -> str
 
 
 def lark_notify(summary: str, run_ok: bool, kpis: dict | None = None,
-                insights: list | None = None, webhook: str | None = None) -> dict:
+                insights: list | None = None, webhook: str | None = None,
+                links: dict | None = None) -> dict:
     webhook = webhook or settings.LARK_WEBHOOK
     if not webhook:
         return {"ok": False, "reason": "LARK_WEBHOOK not configured"}
-    icon = "✅" if run_ok else "❌"
-    lines = [f"{icon} CEX Customer Analytics — {'SUCCESS' if run_ok else 'FAILED'}",
-             f"Summary: {summary}"]
+    links = links or {"zh": settings.DASHBOARD_URL_ZH, "en": settings.DASHBOARD_URL_EN}
+    fields = []
     if kpis:
-        lines += [f"Users: {kpis.get('users', 0):,}",
-                  f"Deposit CVR: {kpis.get('deposit_rate', 0):.1%}",
-                  f"GMV: ${kpis.get('gmv', 0):,.0f}",
-                  f"Fee revenue: ${kpis.get('revenue', 0):,.2f}",
-                  f"90d churn: {kpis.get('churn_rate', 0):.1%}"]
-    if insights:
-        lines.append("Top insights:")
-        for ins in insights[:3]:
-            lines.append(f"• {ins['title']}: {ins['finding']}")
+        for name, value in [
+            ("👥 Users", f"{kpis.get('users', 0):,}"),
+            ("💳 Deposit CVR", f"{kpis.get('deposit_rate', 0)*100:.2f}%"),
+            ("📈 GMV", f"${kpis.get('gmv', 0)/1e6:.2f}M"),
+            ("💰 Fee revenue", f"${kpis.get('revenue', 0):,.2f}"),
+            ("📉 90d churn", f"{kpis.get('churn_rate', 0)*100:.2f}%"),
+            ("🛡 KYC rate", f"{kpis.get('kyc_rate', 0)*100:.2f}%"),
+        ]:
+            fields.append({"is_short": True,
+                           "text": {"tag": "lark_md", "content": f"**{name}**\n{value}"}})
+    insights_md = "\n".join(
+        f"- **{ins['title']}**: {ins['finding']}" for ins in (insights or [])[:6]
+    ) or "No insights"
+    card = {
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "template": "green" if run_ok else "red",
+            "title": {"tag": "plain_text",
+                      "content": f"CEX Analytics · {'SUCCESS' if run_ok else 'FAILED'}"},
+        },
+        "elements": [
+            {"tag": "div",
+             "text": {"tag": "lark_md", "content": f"**One-line summary**\n{summary}"}},
+            {"tag": "hr"},
+            {"tag": "div", "fields": fields},
+            {"tag": "hr"},
+            {"tag": "div",
+             "text": {"tag": "lark_md", "content": f"**Insights**\n{insights_md}"}},
+            {"tag": "hr"},
+            {"tag": "action",
+             "actions": [
+                 {"tag": "button", "type": "primary",
+                  "text": {"tag": "plain_text", "content": "中文看板"},
+                  "url": links["zh"]},
+                 {"tag": "button", "type": "default",
+                  "text": {"tag": "plain_text", "content": "English dashboard"},
+                  "url": links["en"]},
+             ]},
+        ],
+    }
     try:
-        resp = requests.post(webhook, json={"msg_type": "text", "content": {"text": "\n".join(lines)}}, timeout=15)
+        resp = requests.post(webhook, json={"msg_type": "interactive", "card": card}, timeout=15)
         return {"ok": resp.ok, "status_code": resp.status_code, "response": resp.text[:300]}
     except Exception as exc:
         return {"ok": False, "reason": str(exc)}
@@ -109,15 +142,9 @@ def open_browser(url: str) -> dict:
 
 
 # ----------------------------------------------------------------
-# Playwright screenshot
+# Playwright screenshot (scroll and stitch)
 # ----------------------------------------------------------------
-def capture_screenshot(url: str, out_path: Path, timeout_ms: int = 45000) -> dict:
-    """Capture the whole single-page dashboard by scroll-and-stitch.
-
-    Streamlit scrolls an inner container, so Playwright's ``full_page`` only
-    sees the viewport. We hide the sidebar, walk the main container and stitch
-    the slices into one long PNG.
-    """
+def capture_screenshot(url: str, out_path: Path, timeout_ms: int = 60000) -> dict:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         from playwright.sync_api import sync_playwright
@@ -134,7 +161,7 @@ def capture_screenshot(url: str, out_path: Path, timeout_ms: int = 45000) -> dic
                 browser = p.chromium.launch(headless=True, channel="chrome")
             page = browser.new_page(viewport={"width": 1440, "height": 2000})
             page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(5000)
             page.add_style_tag(content="""
                 [data-testid="stSidebar"] {display: none !important;}
                 section[data-testid=stMain] {margin-left: 0 !important; width: 100% !important;}
@@ -153,7 +180,7 @@ def capture_screenshot(url: str, out_path: Path, timeout_ms: int = 45000) -> dic
                     page.evaluate(
                         "(y) => { const el = document.querySelector('section[data-testid=stMain]'); el.scrollTop = y; }",
                         off)
-                    page.wait_for_timeout(450)
+                    page.wait_for_timeout(500)
                     buf = page.screenshot(full_page=False)
                     imgs.append(Image.open(io.BytesIO(buf)).convert("RGB"))
                 width = imgs[0].width
@@ -179,13 +206,18 @@ def _badge(status: str) -> str:
 
 
 def build_html(run_ok: bool, kpis: dict, insights: list, errors: dict,
-               tables: dict | None = None, screenshot: Path | None = None) -> str:
+               tables: dict | None = None, screenshot: Path | None = None,
+               links: dict | None = None, screenshot_en: Path | None = None) -> str:
     status_color = "#1a7f37" if run_ok else "#cf222e"
     status_text = "✅ Pipeline succeeded" if run_ok else "❌ Pipeline failed"
     parts = [
         "<html><body style='font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1f2328'>",
         f"<h1 style='color:{status_color};font-size:22px'>{status_text}</h1>",
         f"<p style='color:#57606a'>Generated at {pd_now()}</p>",
+        (f"<p><a href='{links['zh']}' style='background:#2563eb;color:#fff;padding:9px 16px;"
+         f"border-radius:8px;text-decoration:none;margin-right:10px'>中文看板</a>"
+         f"<a href='{links['en']}' style='background:#0f172a;color:#fff;padding:9px 16px;"
+         f"border-radius:8px;text-decoration:none'>English dashboard</a></p>") if links else "",
         "<h2 style='font-size:17px'>Core KPIs</h2>",
         "<table style='border-collapse:collapse;font-size:14px'>",
     ]
@@ -220,8 +252,11 @@ def build_html(run_ok: bool, kpis: dict, insights: list, errors: dict,
     parts.append("</ol>")
 
     if screenshot and Path(screenshot).exists():
-        parts.append("<h2 style='font-size:17px'>Live dashboard</h2>")
-        parts.append("<img src='cid:dashboard' style='max-width:100%;border:1px solid #d0d7de;border-radius:8px'/>")
+        parts.append("<h2 style='font-size:17px'>中文看板 / Chinese dashboard</h2>")
+        parts.append("<img src='cid:dashboard_zh' style='max-width:100%;border:1px solid #d0d7de;border-radius:8px'/>")
+    if screenshot_en and Path(screenshot_en).exists():
+        parts.append("<h2 style='font-size:17px'>English dashboard</h2>")
+        parts.append("<img src='cid:dashboard_en' style='max-width:100%;border:1px solid #d0d7de;border-radius:8px'/>")
 
     if tables:
         for title, df in tables.items():
@@ -248,7 +283,7 @@ def pd_now() -> str:
 # Email
 # ----------------------------------------------------------------
 def send_email(subject: str, html_body: str, to: str | None = None,
-               screenshot: Path | None = None) -> dict:
+               screenshot: Path | None = None, screenshot_en: Path | None = None) -> dict:
     to = to or settings.MAIL_TO
     out = settings.REPORTS_DIR / "email_preview.html"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -262,19 +297,24 @@ def send_email(subject: str, html_body: str, to: str | None = None,
     msg["From"] = settings.MAIL_FROM
     msg["To"] = to
     msg.attach(MIMEText(html_body, "html", "utf-8"))
-    if screenshot and Path(screenshot).exists():
+    def _attach(path, cid):
         try:
             import io as _io
             from PIL import Image
-            im = Image.open(screenshot)
+            im = Image.open(path)
             im.thumbnail((1200, 20000))
             buf = _io.BytesIO()
             im.convert("RGB").save(buf, format="JPEG", quality=80, optimize=True)
             img = MIMEImage(buf.getvalue(), _subtype="jpeg")
         except Exception:
-            img = MIMEImage(Path(screenshot).read_bytes(), _subtype="png")
-        img.add_header("Content-ID", "<dashboard>")
+            img = MIMEImage(Path(path).read_bytes(), _subtype="png")
+        img.add_header("Content-ID", f"<{cid}>")
         msg.attach(img)
+
+    if screenshot and Path(screenshot).exists():
+        _attach(screenshot, "dashboard_zh")
+    if screenshot_en and Path(screenshot_en).exists():
+        _attach(screenshot_en, "dashboard_en")
     try:
         if settings.SMTP_PORT == 465:
             server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=25)

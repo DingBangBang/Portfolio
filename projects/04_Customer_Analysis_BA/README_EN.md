@@ -5,11 +5,113 @@
 **_A blueprint for full-lifecycle analytics on a centralised exchange (CEX): from the sign-up conversion funnel and RFM segmentation, through churn survival analysis, to LTV prediction, marketing attribution and incremental-ROI measurement._**
 
 - Language: `Python` `SQL`
-- Status: **planned**. This README is the full implementation blueprint (background / approach / data / steps / dev docs / deliverables); code and data will be built out following it.
+- Status: **implemented and locally verified**. Data, dbt, algorithms, dashboard, three-source notifications and the Docker image are all in place; see section 1 for quick start and section 8 for results.
 
 ---
 
-## 1. Background
+## 1. Quick Start & Deployment
+
+> Run everything from `projects/04_Customer_Analysis_BA/`. The environment is isolated in `customer_analysis_ba`, so the global Python is untouched.
+
+### 1.1 One-time setup
+
+```bash
+cd projects/04_Customer_Analysis_BA
+conda create -n customer_analysis_ba python=3.10 -y
+conda activate customer_analysis_ba
+pip install -r requirements.txt
+
+# macOS: if scipy fails with a dlopen / __thread_bss error:
+# pip install --force-reinstall --no-deps scipy==1.13.1
+
+# optional: LightGBM needs libomp on macOS; otherwise it falls back automatically
+# brew install libomp
+
+# optional: dashboard screenshots use Playwright + the local Chrome
+pip install playwright
+```
+
+### 1.2 Data → DuckDB → dbt
+
+```bash
+python scripts/generate_mock_data.py          # 16 tables -> data/raw/*.parquet (seed=42)
+python scripts/load_raw_to_duckdb.py          # raw schema views -> warehouse.duckdb
+
+cd dbt_project
+DUCKDB_PATH=../warehouse.duckdb dbt run  --profiles-dir .
+DUCKDB_PATH=../warehouse.duckdb dbt test --profiles-dir .
+cd ..
+```
+
+### 1.3 Full pipeline (data → dbt → modelling → reports → notifications)
+
+```bash
+python main.py                 # full run, reuses existing data
+python main.py --regenerate    # regenerate synthetic data first
+python main.py --no-email      # write a local preview instead of sending
+python main.py --skip-dbt      # reuse existing marts
+```
+
+Outputs land in `reports/` (KPIs, attribution, channels, LTV, survival, experiments, budget elasticity), plus `reports/dashboard_screenshot.png`, `reports/email_preview.html` and `reports/latest_run.json`.
+
+### 1.4 Dashboard
+
+```bash
+streamlit run dashboards/app.py
+# http://localhost:8501
+```
+
+### 1.5 Docker (dashboard + Redis)
+
+```bash
+docker compose up -d --build
+# dashboard http://localhost:8501, Redis localhost:6379
+```
+
+> The image only ships dashboard runtime dependencies (`requirements-docker.txt`); core algorithms run in the host conda env. `warehouse.duckdb` is mounted as a volume.
+
+---
+
+### 1.6 Docker image explained (why 1.03G / local vs cloud storage / one-click on Windows)
+
+**Why 1.03G (224.8MB compressed)?**
+
+| Layer | Content | Notes |
+| --- | --- | --- |
+| Base | `python:3.10-slim` | ~120MB Debian slim + Python runtime |
+| System deps | `libgomp1`, `curl` | for LightGBM / healthcheck, tens of MB |
+| Python deps | pandas / numpy / duckdb / pyarrow / streamlit / plotly / matplotlib | scientific + visualisation wheels dominate the size |
+| Code | `dashboards/`, `src/`, `config/` | only a few MB |
+
+> The image uses `requirements-docker.txt` (dashboard runtime only) and does **not** bundle LightGBM, lifelines or Prophet; algorithms run in the host conda env. 1.03G is already the slim option for the dashboard alone.
+
+**Local vs cloud storage**
+
+- **Local**: layers live in the Docker Desktop VM disk (macOS: `~/Library/Containers/com.docker.docker/Data/vms/0/data`); `docker images` shows the uncompressed 1.03G;
+- **Cloud**: DockerHub stores compressed layers; `latest` is ~**224.8MB** and pulls only missing layers;
+- **Data**: `warehouse.duckdb` and `reports/` are not baked into the image; they are volume-mounted so data and artefacts stay current.
+
+**Windows one-click**
+
+```powershell
+# 1) install and start Docker Desktop for Windows (WSL2 backend)
+# 2) pull the image
+docker pull bonnie333333333/cex-customer-analytics:latest
+
+# 3) from the project folder (with warehouse.duckdb and reports/)
+docker run -d --name cex-dashboard -p 8501:8501 `
+  -v "${PWD}/warehouse.duckdb:/app/warehouse.duckdb" `
+  -v "${PWD}/reports:/app/reports" `
+  bonnie333333333/cex-customer-analytics:latest
+
+# 4) open http://localhost:8501/?lang=zh or ?lang=en
+```
+
+
+
+---
+
+## 2. Background
 
 Growth teams at exchanges suffer from three things they cannot articulate:
 
@@ -21,7 +123,9 @@ This project builds a **reproducible, explainable, actionable** analytics system
 
 Audience: growth leads, operations, marketing and management.
 
-## 2. Framework & Approach
+---
+
+## 3. Framework & Approach
 
 I structure the whole thing as four progressive layers — **see it → attribute it → predict it → decide it** — so the work never starts by piling on models:
 
@@ -43,9 +147,11 @@ Three principles run throughout:
 - **Correlation ≠ causation** — any "A caused B" claim must survive a counterfactual / randomised experiment / regression discontinuity;
 - **Built for decisions** — every analysis ends with a "so what next" action, otherwise it does not ship.
 
-## 3. Data Design
+---
 
-### 3.1 Sourcing strategy
+## 4. Data design & metric system
+
+### 4.1 Sourcing strategy
 
 Rather than depending on one ready dataset, I use **"public datasets as a base + synthetic augmentation"**:
 
@@ -57,7 +163,7 @@ Rather than depending on one ready dataset, I use **"public datasets as a base +
 
 > All generation scripts fix a random seed (`random_state`), so anyone reproduces the same dataset.
 
-### 3.2 Tables (data dictionary)
+### 4.2 Tables (data dictionary)
 
 The 16 core tables below, **each with ≥ 1,000 rows**, directly support every analysis step in this document.
 
@@ -80,7 +186,7 @@ The 16 core tables below, **each with ≥ 1,000 rows**, directly support every a
 | 15 | `fact_ltv_labels` | LTV labels | `user_id, cohort, ltv_30d, ltv_90d, churn_90d` | ~250K | LTV / churn modelling |
 | 16 | `fact_funnel_snapshot` | Funnel step snapshot | `period, step, user_cnt, prev_step_cnt, step_cvr` | ~5K | Funnel monitoring / drill-down |
 
-### 3.3 Relationships (simplified ER)
+### 4.3 Relationships (simplified ER)
 
 ```
 dim_users (user_id) 1───∞ fact_events
@@ -95,14 +201,12 @@ fact_ads_spend / fact_social_metrics / fact_page_modules  —— independent fac
 fact_cta_experiments / fact_ab_assignments                —— experiment-level facts
 ```
 
-### 3.4 Data-quality checks (mandatory before use)
+### 4.4 Data-quality checks (mandatory before use)
 
 - **Consistency**: `GMV(fact_transactions)` must equal reported GMV; funnel counts must be monotonically decreasing;
 - **Completeness**: `user_id` foreign-key hit rate ≥ 99.9%; no future timestamps;
 - **Sanity**: amounts > 0, fees ≥ 0, `vip_level` matches trading-volume distribution;
 - **Dedup**: dedupe events/touchpoints by `event_id / tp_id` so repetition does not inflate conclusions.
-
-## 4. Metric System
 
 | Layer | Metrics | Notes |
 | --- | --- | --- |
@@ -114,7 +218,9 @@ fact_cta_experiments / fact_ab_assignments                —— experiment-leve
 | Churn | churn rate, survival probability, hazard | with survival analysis |
 | Marketing | ROI, incremental ROI, iCAC, CPA | incremental needs a natural-growth baseline removed |
 
-## 5. Implementation Plan
+---
+
+## 5. Implementation plan
 
 > Each phase is accepted by a **deliverable**, so value lands every phase instead of at the very end.
 
@@ -158,7 +264,9 @@ fact_cta_experiments / fact_ab_assignments                —— experiment-leve
 **Phase 7 · Visualise & deliver**
 24. Consolidate into dashboards + reports + a reusable codebase, and write up the methodology.
 
-## 6. Key Methods & Technical Decisions
+---
+
+## 6. Key methods & technical decisions
 
 ### 6.1 Segmentation: RFM + advanced dimensionality reduction
 
@@ -297,162 +405,9 @@ Identify (tags/segments) → Strategy (segment × action × benefit) → Reach (
 - **Assist value**: `(Markov contribution − last-touch contribution) / last-touch contribution`, producing conclusions like "brand words and a given social channel have X% higher assist value than the last-touch model suggests";
 - **Methodological note**: Markov and Shapley answer different questions (see 6.9) — always state which one is used and how error is defined.
 
-## 7. Development Docs (structure / env / run)
-
-### 7.1 Planned layout
-
-```
-04_Customer_Analysis_BA/
-├── README.md / README_EN.md      # This blueprint (zh / en)
-├── data/
-│   ├── schema.sql                # DDL
-│   ├── generate_data.py          # seeded synthetic-data generator
-│   └── sample/                   # small samples (large raw files gitignored)
-├── sql/
-│   ├── dws_user_wide.sql         # user-level wide table
-│   └── metrics_dict.sql          # metric definitions
-├── src/
-│   ├── funnel/                   # conversion funnel (6.2)
-│   ├── segmentation/             # RFM + dimensionality reduction (6.1)
-│   ├── attribution/              # multi-model attribution + Shapley (6.9 / 6.10)
-│   ├── survival/                 # Cox survival (6.7)
-│   ├── ltv/                      # BG/NBD & ML (6.5)
-│   ├── experiment/               # factorial / A/B (6.13 / 6.15)
-│   └── budget/                   # budget elasticity & simulator (6.18)
-├── notebooks/                    # exploration & reports
-├── reports/                      # deliverables (charts / reports)
-└── requirements.txt
-```
-
-### 7.2 Environment & dependencies
-
-- Python ≥ 3.10; deps: `pandas` `numpy` `scipy` `scikit-learn` `statsmodels` `lifelines` (Cox) `lifetimes` (BG/NBD) `lightgbm` `prophet` `markovchain`/custom `umap-learn` `matplotlib` `plotly` `openpyxl`;
-- Database: local `MySQL` / `PostgreSQL` (create tables from `sql/`).
-
-### 7.3 How to run (planned)
-
-```bash
-# 1. create tables and generate data
-mysql -u <user> -p < data/schema.sql
-python data/generate_data.py --seed 42
-
-# 2. run modules
-python src/funnel/run.py
-python src/segmentation/run.py
-python src/attribution/run.py
-python src/survival/run.py
-python src/ltv/run.py
-python src/budget/simulator.py
-```
-
-> The interfaces above are planned; files will be added across Phase 0–7, with unfinished parts marked `TODO`.
-
-## 8. Expected Insights (placeholders)
-
-> Templates to be filled with real numbers once executed.
-
-- Biggest funnel leak: `TODO` (expected around "register → KYC" or "KYC → first deposit");
-- Leading-indicator behaviour of high-churn users: `TODO` (likely related to not viewing the tutorial / not clicking the first task);
-- Highest-LTV segment and its share: `TODO`;
-- Channels under-valued by last-touch: `TODO` (brand words and social assist likely under-stated);
-- Suspected inflated channels: `TODO`;
-- Optimal budget allocation: `TODO` (likely constrained by diminishing marginal returns).
-
-## 9. Risks, Boundaries & TODO
-
-- **Data boundary**: synthetic data validates the methodology, not real business conclusions; production use must connect to the real warehouse and recalibrate distributions;
-- **Causal boundary**: without real randomisation, quasi-experimental results must state assumptions (e.g. parallel trends) and avoid over-interpretation;
-- **Attribution boundary**: multi-model attribution is sensitive to missing paths / cross-device gaps — assess data completeness first;
-- **TODO**: `[ ]` real datasets, `[ ]` code, `[ ]` dashboard and report artefacts.
-
-## 10. Deliverables
-
-| Category | Artefact | Status |
-| --- | --- | --- |
-| Docs | this README (zh/en), data dictionary, metric definitions | ✅ blueprint done |
-| Data | 16 core tables + seeded generator | ⏳ TODO |
-| Code | 7 analysis modules under `src/` | ⏳ TODO |
-| Reports | growth-attribution report, experiments & causal findings, LTV tiers | ⏳ TODO |
-| Dashboards | funnel / segmentation / channel / budget-elasticity dashboards | ⏳ TODO |
-| Tool | management assumption simulator | ⏳ TODO |
-
-## 11. Reference Datasets & Further Reading
-
-- Kaggle: *eCommerce events history in cosmetics shop* (behaviour distribution reference);
-- Criteo / public multi-channel attribution datasets (touchpoint-sequence reference);
-- public crypto exchange trading / deposit-withdrawal samples (amount & time distribution reference);
-- Methods: BG/NBD (*Counting Your Customers the Easy Way*), Cox proportional hazards, Shapley-value attribution, Markov removal effect, Prophet decomposition.
-
 ---
 
-> Note: this framework also applies to any "acquire → activate → trade → retain → repurchase" business — swap `dim_users` and the fact-table definitions to reuse it.
-
----
-
-## 12. Quick Start (step-by-step reproduction after clone)
-
-> Run everything from `projects/04_Customer_Analysis_BA/`. The environment is isolated in `customer_analysis_ba`, so the global Python is untouched.
-
-### 12.1 One-time setup
-
-```bash
-cd projects/04_Customer_Analysis_BA
-conda create -n customer_analysis_ba python=3.10 -y
-conda activate customer_analysis_ba
-pip install -r requirements.txt
-
-# macOS: if scipy fails with a dlopen / __thread_bss error:
-# pip install --force-reinstall --no-deps scipy==1.13.1
-
-# optional: LightGBM needs libomp on macOS; otherwise it falls back automatically
-# brew install libomp
-
-# optional: dashboard screenshots use Playwright + the local Chrome
-pip install playwright
-```
-
-### 12.2 Data → DuckDB → dbt
-
-```bash
-python scripts/generate_mock_data.py          # 16 tables -> data/raw/*.parquet (seed=42)
-python scripts/load_raw_to_duckdb.py          # raw schema views -> warehouse.duckdb
-
-cd dbt_project
-DUCKDB_PATH=../warehouse.duckdb dbt run  --profiles-dir .
-DUCKDB_PATH=../warehouse.duckdb dbt test --profiles-dir .
-cd ..
-```
-
-### 12.3 Full pipeline (data → dbt → modelling → reports → notifications)
-
-```bash
-python main.py                 # full run, reuses existing data
-python main.py --regenerate    # regenerate synthetic data first
-python main.py --no-email      # write a local preview instead of sending
-python main.py --skip-dbt      # reuse existing marts
-```
-
-Outputs land in `reports/` (KPIs, attribution, channels, LTV, survival, experiments, budget elasticity), plus `reports/dashboard_screenshot.png`, `reports/email_preview.html` and `reports/latest_run.json`.
-
-### 12.4 Dashboard
-
-```bash
-streamlit run dashboards/app.py
-# http://localhost:8501
-```
-
-### 12.5 Docker (dashboard + Redis)
-
-```bash
-docker compose up -d --build
-# dashboard http://localhost:8501, Redis localhost:6379
-```
-
-> The image only ships dashboard runtime dependencies (`requirements-docker.txt`); core algorithms run in the host conda env. `warehouse.duckdb` is mounted as a volume.
-
----
-
-## 13. Implementation Layout
+## 7. Implementation layout
 
 ```
 04_Customer_Analysis_BA/
@@ -486,11 +441,11 @@ docker compose up -d --build
 
 ---
 
-## 14. Results & Key Insights (seed=42, 20,000 users / 240 days)
+## 8. Results & key insights
 
 > The data is **synthetic**, used to validate the methodology and engineering chain. Definitions match a real business, but the numbers are not real operating results.
 
-### 14.1 Data & warehouse
+### 8.1 Data & warehouse
 
 | Table | Rows | Table | Rows |
 | --- | ---: | --- | ---: |
@@ -506,7 +461,7 @@ docker compose up -d --build
 - `dbt run`: **27/27** models succeed; `dbt test`: **30/30** pass (uniqueness, not-null, accepted values, relationships + 4 business tests);
 - Total GMV: **$78,755,325.65**; fee revenue: **$78,755.33**.
 
-### 14.2 Core KPIs (`reports/kpi_summary.json`)
+### 8.2 Core KPIs (`reports/kpi_summary.json`)
 
 | Metric | Value | Metric | Value |
 | --- | ---: | --- | ---: |
@@ -516,7 +471,7 @@ docker compose up -d --build
 | Avg LTV (90d) | $3.23 | 90-day churn | **62.21%** |
 | AOV | $1,356.40 | GMV per trader | $10,346.21 |
 
-### 14.3 Funnel (last-day snapshot)
+### 8.3 Funnel (last-day snapshot)
 
 | Step | Users | Step CVR |
 | --- | ---: | ---: |
@@ -528,7 +483,7 @@ docker compose up -d --build
 
 > **The biggest leak is KYC → first deposit: 5,724 users lost.** This is the highest-priority fix.
 
-### 14.4 RFM + dimensionality-reduction segments
+### 8.4 RFM + dimensionality-reduction segments
 
 - K-Means selects `k=3` (silhouette **0.3746**, two PCA components explain **84.72%** of variance);
 
@@ -538,7 +493,7 @@ docker compose up -d --build
 | 1 | 4,294 | $6,932.41 | $5.80 | mass-market core |
 | 2 | 2,512 | $17,328.26 | $14.26 | high-value core; prioritise retention |
 
-### 14.5 Four attribution models (first / last / position / Markov)
+### 8.5 Four attribution models (first / last / position / Markov)
 
 | Channel | First-touch | Last-touch | Position-based | Markov | Markov vs last |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -554,7 +509,7 @@ docker compose up -d --build
 - **Error definition**: standard deviation of channel shares across 5 resampled folds (`stability_std`, 0.004–0.009 → stable) plus mean absolute deviation between fold-mean and full-sample shares (`reconstruction_error`, all < 0.0002);
 - **Conclusion**: last-touch materially under-states the assist value of affiliate / kol / telegram and over-states organic / referral. Markov removal effect is the primary model; last-touch is kept as a baseline only.
 
-### 14.6 Channel quality & Shapley attribution
+### 8.6 Channel quality & Shapley attribution
 
 | Channel | Shapley share | ROI | CPA | Grade | Inflation flag |
 | --- | ---: | ---: | ---: | :---: | :---: |
@@ -569,7 +524,7 @@ docker compose up -d --build
 
 > Shapley answers "how much better on average with it"; Markov answers "does it work without it". Cross-checking both points to the same high-value (organic / referral) and high-CPA (affiliate / kol / telegram) channels.
 
-### 14.7 LTV: LightGBM vs BG/NBD
+### 8.7 LTV: LightGBM vs BG/NBD
 
 | Model | MAE | RMSE | Spearman | Train / test |
 | --- | ---: | ---: | ---: | ---: |
@@ -579,7 +534,7 @@ docker compose up -d --build
 - Evaluated on an **out-of-time** split (80/20 by registration date), not a random split;
 - **Decision**: LightGBM for point predictions; BG/NBD's value is `P(alive)` and expected purchase counts — for churn detection and cold-start, not for winning an MAE contest.
 
-### 14.8 Survival analysis (Cox proportional hazards)
+### 8.8 Survival analysis (Cox proportional hazards)
 
 > Event = first deposit; `hazard_ratio > 1` means faster deposit conversion than the affiliate baseline.
 
@@ -594,7 +549,7 @@ docker compose up -d --build
 | register_device_type = ios | 1.200 | <0.001 |
 | register_channel = kol | 1.098 | 0.147 (n.s.) |
 
-### 14.9 Experiments & causal inference
+### 8.9 Experiments & causal inference
 
 **A/B test (sign-up CTA)**
 
@@ -617,13 +572,13 @@ docker compose up -d --build
 - Random-forest importance: `cta_color_red` 0.174, `cta_color_green` 0.154, `cta_copy_claim_bonus` 0.134;
 - **Caveat**: high importance ≠ highest marginal CVR (trees capture interactions/imbalance); read both together.
 
-### 14.10 Quarterly budget elasticity
+### 8.10 Quarterly budget elasticity
 
 - Method: per-channel `conversions ~ log(spend)` regression + STL decomposition (trend / seasonality / residual);
 - Current marginal conversions per dollar: affiliate **0.2386**, twitter 0.2310, telegram 0.2133, kol 0.2100, organic 0.2078, referral 0.1914, brand_search 0.1885, google_ads 0.1872;
 - **Key warning**: affiliate has the highest marginal conversion but the lowest ROI (0.49%) and highest CPA ($1,680) — cheap, low-value conversions. Never allocate budget on marginal conversion alone; pair it with LTV/ROI.
 
-### 14.11 Campaign / airdrop incremental ROI (DID)
+### 8.11 Campaign / airdrop incremental ROI (DID)
 
 | Campaign | Participants | Incremental revenue | Incremental ROI |
 | --- | ---: | ---: | ---: |
@@ -635,7 +590,7 @@ docker compose up -d --build
 
 > Method: participants vs same-channel non-participants, 4 weeks before/after, difference-in-differences. Most campaigns **fail to beat the natural-growth baseline** — exactly why gross-revenue campaign reporting overstates impact.
 
-### 14.12 Key insights (data-driven)
+### 8.12 Key insights (data-driven)
 
 1. **Biggest leak is KYC → first deposit (5,724 users, CVR 59.55%)**: prioritise deposit bonuses, simplify the deposit flow, and retarget KYC-completed non-depositors;
 2. **90-day churn 62.21%**: build a win-back programme by RFM segment (at_risk / hibernating);
@@ -647,64 +602,7 @@ docker compose up -d --build
 
 ---
 
-## 15. Dev Docs & Process Log
-
-| Document | Content |
-| --- | --- |
-| [docs/development_log.md](./docs/development_log.md) | Technical decisions, bugs found & fixed (index length, missing field, scipy binary, BG/NBD convergence, degenerate Markov, etc.) |
-| [docs/data_dictionary.md](./docs/data_dictionary.md) / [EN](./docs/data_dictionary_EN.md) | Field names and types of all 16 tables, generated from the actual Parquet files |
-| [docs/scheduling.md](./docs/scheduling.md) | cron / launchd setup (kept manual by default) |
-| [reports/insights.md](./reports/insights.md) | Auto-generated insights and suggestions per run |
-| [reports/latest_run.json](./reports/latest_run.json) | Steps, errors, KPIs and notification status of the last run |
-
-### 15.1 Bug fixes (summary)
-
-1. **`ValueError: cannot add indices of unequal length`** — a length-1 `pd.Series(base)` added to an N-length timedelta; fixed by building a DatetimeIndex first;
-2. **`KeyError: event_time`** — the behavioural-sequence SQL omitted `event_time`; added it;
-3. **scipy `__thread_bss` dlopen failure** (macOS 27 / arm64) — scipy 1.15.3 wheel incompatible; downgraded to `scipy==1.13.1`;
-4. **BG/NBD did not converge** — penalizer too small; retry with 0.5 / 1.0 / 2.0;
-5. **Degenerate Markov attribution** (7 channels = 0) — the removal logic re-routed traffic instead of cutting it; now transitions into/out of the removed channel go to NULL before computing absorption;
-6. **BG/NBD CLV vs LTV unit mismatch** — Gamma-Gamma predicts spend, LTV is fee revenue; scaled by 0.1%;
-7. **LightGBM missing libomp** — `brew install libomp`; `HistGradientBoosting` kept as a no-libomp fallback.
-
----
-
-## 16. Deliverables (actual)
-
-| Category | Artefact | Status |
-| --- | --- | :---: |
-| Environment | `customer_analysis_ba` (Python 3.10.22) | ✅ |
-| Data | `scripts/generate_mock_data.py` + 16 Parquet tables (seed=42) | ✅ |
-| Warehouse | `warehouse.duckdb` with raw/staging/intermediate/marts | ✅ |
-| dbt | 27 models + 30 tests | ✅ all pass |
-| Algorithms | `src/modeling.py` (all §6 methods incl. 4 attribution models) | ✅ |
-| Analysis | `src/analysis.py` (KPIs / insights / report export) | ✅ |
-| Orchestration | `main.py` (data → dbt → modelling → reports → notify) | ✅ |
-| Dashboard | `dashboards/app.py` (Streamlit + Redis cache) | ✅ |
-| Notifications | macOS banner / browser / HTML email / Playwright screenshot | ✅ (email needs SMTP) |
-| Reports | 15 CSV/JSON/MD artefacts + dashboard screenshot | ✅ |
-| Docs | bilingual README, dev log, bilingual data dictionary, scheduling | ✅ |
-| Docker | `Dockerfile` + `docker-compose.yml` | ✅ |
-| Scheduling | `scripts/run_daily.sh` + `docs/scheduling.md` | ✅ (manual) |
-
----
-
-## 17. Dashboard Screenshot
-
-> Captured automatically with Playwright from the live Streamlit dashboard (1440×2200). The Chinese dashboard UI shows: KPI cards (registered users, deposit conversion, traders, fee revenue, GMV, average LTV, 90-day churn, KYC rate), the conversion funnel, and the daily funnel trend chart.
-
-![Streamlit dashboard](./reports/dashboard_screenshot.png)
-
----
-
-## 18. Boundaries & Next Steps
-
-- Synthetic data validates the methodology and engineering chain; to plug in a real warehouse, only replace `data/raw` and the `raw` views — dbt and the algorithms stay unchanged;
-- Email requires `SMTP_HOST / SMTP_USER / SMTP_PASSWORD` in `.env`; otherwise a local `reports/email_preview.html` is written;
-- DockerHub push requires `docker login` first;
-- Optional upgrades: Prophet (instead of STL), UMAP (instead of PCA), real ad/on-chain API ingestion.
-
-### 14.13 Deep-review results (full 6.1–6.19 coverage)
+### 8.13 Deep-review results (full 6.1–6.19 coverage)
 
 | Module | Result |
 | --- | --- |
@@ -718,11 +616,11 @@ docker compose up -d --build
 
 ---
 
-## 19. Deep Review: README 6.1–6.19 ↔ code ↔ dashboard
+## 9. Deep review: README 6.1–6.19 ↔ code ↔ dashboard
 
 > Conclusion: **19/19 sections have computation logic, charts, a bold business conclusion and field definitions**. The old dashboard had only 7 pages and covered less than half of the modules; it has been rebuilt as a single-page data story with full coverage.
 
-### 19.1 Coverage matrix
+### 9.1 Coverage matrix
 
 | # | Topic | Function (`src/modeling.py`) | Dashboard anchor | Artefacts (`reports/results/`) |
 | --- | --- | --- | --- | --- |
@@ -746,7 +644,7 @@ docker compose up -d --build
 | 6.18 | Budget elasticity + simulator | `budget_elasticity` + `simulate_budget` | `#s618` | `budget_elasticity.csv` / `budget_decomposition.csv` |
 | 6.19 | OKR attribution stripping | `okr_attribution` | `#s619` | `okr_attribution.csv` |
 
-### 19.2 Data gaps and upgrade paths (no module is currently failing)
+### 9.2 Data gaps and upgrade paths (no module is currently failing)
 
 | 6.x | Missing data | Impact | Current substitute | Suggested addition |
 | --- | --- | --- | --- | --- |
@@ -758,7 +656,7 @@ docker compose up -d --build
 
 > These are **data-enhancement items, not code errors**; all 19 modules currently run, chart and produce conclusions.
 
-### 19.3 Dashboard & notification upgrade (this iteration)
+### 9.3 Dashboard & notification upgrade (this iteration)
 
 - **Single-page scroll**: 20 blocks (00 overview + 6.1–6.19), sidebar anchor links + `scroll-behavior: smooth`, no page switching;
 - **Three pieces per block**: chart + bold business conclusion + field definitions;
@@ -768,35 +666,118 @@ docker compose up -d --build
 
 ---
 
-## 20. This Iteration's Deliverables (dashboard + notifications + Docker)
+## 10. Dashboard, notifications & Docker image
 
-| Category | Artefact | Verification |
-| --- | --- | --- |
-| Dashboard | Single page with **20 blocks** (00 overview + 6.1–6.19), sidebar anchors with smooth scroll | Playwright: **20/20 anchors**; clicking 6.19 moves `stMain.scrollTop` from 0 to **21,884** |
-| Visualisation | Every block has a chart + bold conclusion + field definitions | 19/19 covered, ~**13,500** characters of body text |
-| Artefacts | **55** CSV/JSON files under `reports/results/` | all generated |
-| macOS notification | `terminal-notifier` with a one-line business summary | ✅ verified |
-| Lark | Webhook text card | ✅ `StatusCode=0` |
-| Email | Gmail SMTP **465 (SSL)** | ✅ `sent` to dingbangchu@gmail.com |
-| Screenshot | Playwright scroll-and-stitch long image | ✅ **1440 × 23,150** (3.76 MB) |
-| Docker | `bonnie333333333/cex-customer-analytics:latest` | ✅ local build, container healthy on 8502, 20/20 anchors |
+#### 10.1 Dashboard screenshots
 
-### 20.1 Run from the image
+> Both long screenshots are captured by Playwright scroll-and-stitch at 1440 × 23,150:
 
-```bash
-docker run -d --name cex-dashboard -p 8501:8501 \
-  -v "$(pwd)/warehouse.duckdb:/app/warehouse.duckdb" \
-  -v "$(pwd)/reports:/app/reports" \
-  bonnie333333333/cex-customer-analytics:latest
-# http://localhost:8501
-```
+![Chinese dashboard](./reports/dashboard_screenshot_zh.png)
 
-> The image ships dashboard runtime dependencies only; `warehouse.duckdb` and `reports/` are mounted so data and analytics artefacts stay current.
+![English dashboard](./reports/dashboard_screenshot_en.png)
 
-### 20.2 One-line notification summary
+#### 10.2 Three-source notifications (both languages linked)
 
-The `terminal-notifier` and Lark payload looks like:
+- **macOS**: `terminal-notifier` with a one-line summary plus `?lang=zh` / `?lang=en` links;
+- **Lark**: rich interactive card — six KPI fields at the top (Users / Deposit CVR / GMV / Fee revenue / 90d churn / KYC rate), insights in the middle, and two buttons at the bottom: “中文看板” and “English dashboard”;
+- **Email**: Gmail SMTP 465 (SSL), two buttons at the top, both long screenshots embedded, plus compressed JPEG attachments.
+
+One-line summary example:
 
 ```
-20,000 users | deposit 42.1% | GMV $78.8M | 90d churn 62.2% | ⚠ 90 天流失率: 当前 62.21%
+20,000 users | deposit 42.14% | GMV $78.76M | 90d churn 62.21% | ⚠ 90 天流失率: 当前 62.21%
 ```
+
+#### 10.3 Docker image
+
+```
+bonnie333333333/cex-customer-analytics:latest
+size: 224.8MB (compressed) / 1.03GB (local)
+digest: sha256:ba4d112552a93f3506b640056bd25e6a1b01e982f9d434e61bc57d0c32e1ced3
+```
+
+
+---
+
+## 11. Deliverables
+
+| Category | Artefact | Status |
+| --- | --- | :---: |
+| Environment | `customer_analysis_ba` (Python 3.10.22) | ✅ |
+| Data | `scripts/generate_mock_data.py` + 16 Parquet tables (seed=42) | ✅ |
+| Warehouse | `warehouse.duckdb` with raw/staging/intermediate/marts | ✅ |
+| dbt | 27 models + 30 tests | ✅ all pass |
+| Algorithms | `src/modeling.py` (all §6 methods incl. 4 attribution models) | ✅ |
+| Analysis | `src/analysis.py` (KPIs / insights / report export) | ✅ |
+| Orchestration | `main.py` (data → dbt → modelling → reports → notify) | ✅ |
+| Dashboard | `dashboards/app.py` (Streamlit + Redis cache) | ✅ |
+| Notifications | macOS banner / browser / HTML email / Playwright screenshot | ✅ (email needs SMTP) |
+| Reports | 15 CSV/JSON/MD artefacts + dashboard screenshot | ✅ |
+| Docs | bilingual README, dev log, bilingual data dictionary, scheduling | ✅ |
+| Docker | `Dockerfile` + `docker-compose.yml` | ✅ |
+| Scheduling | `scripts/run_daily.sh` + `docs/scheduling.md` | ✅ (manual) |
+
+---
+
+## 12. Dev docs & process log
+
+| Document | Content |
+| --- | --- |
+| [docs/development_log.md](./docs/development_log.md) | Technical decisions, bugs found & fixed (index length, missing field, scipy binary, BG/NBD convergence, degenerate Markov, etc.) |
+| [docs/data_dictionary.md](./docs/data_dictionary.md) / [EN](./docs/data_dictionary_EN.md) | Field names and types of all 16 tables, generated from the actual Parquet files |
+| [docs/scheduling.md](./docs/scheduling.md) | cron / launchd setup (kept manual by default) |
+| [reports/insights.md](./reports/insights.md) | Auto-generated insights and suggestions per run |
+| [reports/latest_run.json](./reports/latest_run.json) | Steps, errors, KPIs and notification status of the last run |
+
+### 12.1 Bug fixes (summary)
+
+1. **`ValueError: cannot add indices of unequal length`** — a length-1 `pd.Series(base)` added to an N-length timedelta; fixed by building a DatetimeIndex first;
+2. **`KeyError: event_time`** — the behavioural-sequence SQL omitted `event_time`; added it;
+3. **scipy `__thread_bss` dlopen failure** (macOS 27 / arm64) — scipy 1.15.3 wheel incompatible; downgraded to `scipy==1.13.1`;
+4. **BG/NBD did not converge** — penalizer too small; retry with 0.5 / 1.0 / 2.0;
+5. **Degenerate Markov attribution** (7 channels = 0) — the removal logic re-routed traffic instead of cutting it; now transitions into/out of the removed channel go to NULL before computing absorption;
+6. **BG/NBD CLV vs LTV unit mismatch** — Gamma-Gamma predicts spend, LTV is fee revenue; scaled by 0.1%;
+7. **LightGBM missing libomp** — `brew install libomp`; `HistGradientBoosting` kept as a no-libomp fallback.
+
+---
+
+## 13. Risks, boundaries & roadmap
+
+- **Data boundary**: synthetic data validates the methodology, not real business conclusions; production use must connect to the real warehouse and recalibrate distributions;
+- **Causal boundary**: without real randomisation, quasi-experimental results must state assumptions (e.g. parallel trends) and avoid over-interpretation;
+- **Attribution boundary**: multi-model attribution is sensitive to missing paths / cross-device gaps — assess data completeness first;
+- **TODO**: `[ ]` real datasets, `[ ]` code, `[ ]` dashboard and report artefacts.
+
+- Synthetic data validates the methodology and engineering chain; to plug in a real warehouse, only replace `data/raw` and the `raw` views — dbt and the algorithms stay unchanged;
+- Email requires `SMTP_HOST / SMTP_USER / SMTP_PASSWORD` in `.env`; otherwise a local `reports/email_preview.html` is written;
+- DockerHub push requires `docker login` first;
+- Optional upgrades: Prophet (instead of STL), UMAP (instead of PCA), real ad/on-chain API ingestion.
+
+
+---
+
+## 14. Next steps
+
+1. **Plug in real data sources**: replace synthetic spend with Google Ads / Meta Ads APIs and synthetic transactions with exchange or on-chain APIs;
+2. **Upgrade time-series and dimensionality reduction**: Prophet instead of STL, UMAP instead of PCA, with stability/interpretability comparisons;
+3. **Upgrade DID to randomised experiments**: assign campaigns randomly, or add covariates for PSM/RDD;
+4. **Add Hotjar heatmaps and module-level A/B**: introduce `fact_heatmap_events` and `fact_module_ab` to replace the relative-clickability proxy;
+5. **Productionise Redis and scheduling**: version-keyed cache invalidation and split `main.py` into an Airflow DAG;
+6. **Monitoring & alerts**: threshold alerts on funnel, deposit rate, CAC and LTV/CAC, auto-triggering Lark cards;
+7. **Model governance**: out-of-time backtests, feature-drift monitoring and retraining for the LightGBM / churn models.
+
+
+---
+
+## 15. References
+
+- Fader, P. S., Hardie, B. G. S., & Lee, K. L. (2005). *Counting Your Customers the Easy Way: An Alternative to the Pareto/NBD Model*. Marketing Science.
+- Cox, D. R. (1972). *Regression Models and Life-Tables*. Journal of the Royal Statistical Society: Series B.
+- Shapley, L. S. (1953). *A Value for n-Person Games*. Contributions to the Theory of Games.
+- Anderl, E., Becker, I., von Wangenheim, F., & Schumann, J. H. (2016). *Mapping the Customer Journey: A Graph-Based Framework for Online Attribution Modeling*. SSRN.
+- Charnes, A., Cooper, W. W., & Rhodes, E. (1978). *Measuring the Efficiency of Decision Making Units*. European Journal of Operational Research.
+- Taylor, S. J., & Letham, B. (2018). *Forecasting at Scale* (Prophet). The American Statistician.
+- dbt Labs: https://docs.getdbt.com/
+- DuckDB: https://duckdb.org/docs/
+- Streamlit: https://docs.streamlit.io/
+- scikit-learn, lifelines, lifetimes, LightGBM documentation.
