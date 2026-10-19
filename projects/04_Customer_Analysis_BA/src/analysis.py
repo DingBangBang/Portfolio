@@ -134,44 +134,51 @@ def build_insights(kpis: dict, results: dict) -> list[dict]:
             "status": "info",
             "suggestion": "以机器学习为主预测器，BG/NBD 的 P(alive) 作为流失判定特征",
         })
+    churn = results.get("churn")
+    if churn is not None:
+        best = churn["metrics"].sort_values("AUC", ascending=False).iloc[0]
+        insights.append({
+            "title": "流失预测模型对比",
+            "finding": f"{best['model']} AUC={best['AUC']:.4f}，recall={best['recall']:.4f}",
+            "status": "ok" if best["AUC"] >= 0.7 else "info",
+            "suggestion": "AUC>=0.7 可用于运营圈人；否则补充行为特征后再上线",
+        })
+
+    vip = results.get("vip")
+    if vip:
+        st = vip["stability"]
+        insights.append({
+            "title": "VIP 分层稳定性",
+            "finding": f"等级不变率 {st['stability_rate']:.2%}，升级 {st['upgrades']:,}，降级 {st['downgrades']:,}",
+            "status": "ok" if st["stability_rate"] >= 0.8 else "alert",
+            "suggestion": "不变率低于 80% 时拉长考核窗口或设置缓冲带，避免大客户抖动",
+        })
+
+    ops = results.get("ops")
+    if ops is not None and len(ops):
+        top = ops.iloc[0]
+        insights.append({
+            "title": "运营优先级最高的人群",
+            "finding": f"{top['segment']}（{top['users']:,} 人，优先级分 {top['priority_score']:,.0f}）",
+            "status": "info",
+            "suggestion": f"先执行「{top['strategy']}」，目标指标 {top['target_metric']}",
+        })
+
+    fa = results.get("funnel_attr")
+    if fa:
+        t = fa["table"].dropna(subset=["contribution_pct"])
+        if len(t):
+            top = t.reindex(t["contribution_pct"].abs().sort_values(ascending=False).index).iloc[0]
+            insights.append({
+                "title": "整体 CVR 变化的最大贡献环节",
+                "finding": f"{top['step']} 贡献 {top['contribution_pct']:.1f}%",
+                "status": "info",
+                "suggestion": "优先修复贡献最大的负向环节，其次巩固正向环节",
+            })
+
     return insights
 
 
-def save_reports(results: dict, kpis: dict, insights: list[dict], out: Path = REPORTS) -> dict:
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "kpi_summary.json").write_text(json.dumps(kpis, ensure_ascii=False, indent=2))
-    pd.DataFrame([kpis]).to_csv(out / "kpi_summary.csv", index=False)
 
-    lines = ["# 自动生成的核心洞察\n", f"生成时间：{pd.Timestamp.now():%Y-%m-%d %H:%M:%S}\n"]
-    for i, ins in enumerate(insights, 1):
-        lines.append(f"## {i}. {ins['title']}（{ins['status']}）\n- 发现：{ins['finding']}\n- 建议：{ins['suggestion']}\n")
-    (out / "insights.md").write_text("\n".join(lines), encoding="utf-8")
-
-    def _save(df, name):
-        if isinstance(df, pd.DataFrame) and len(df):
-            df.to_csv(out / name, index=False)
-
-    if results.get("attribution") is not None:
-        _save(results["attribution"]["table"], "attribution_comparison.csv")
-    if isinstance(results.get("shapley"), pd.DataFrame):
-        _save(results["shapley"], "channel_shapley.csv")
-    if results.get("ltv") is not None:
-        _save(results["ltv"]["metrics"], "ltv_metrics.csv")
-    if results.get("survival") is not None:
-        _save(results["survival"], "cox_hazard_ratios.csv")
-    if results.get("funnel") is not None:
-        _save(results["funnel"]["by_channel"], "funnel_by_channel.csv")
-        _save(results["funnel"]["by_device"], "funnel_by_device.csv")
-    if results.get("rfm") is not None:
-        _save(results["rfm"]["personas"], "rfm_personas.csv")
-    if results.get("campaign") is not None:
-        _save(results["campaign"]["table"], "campaign_incremental_roi.csv")
-    if results.get("budget") is not None:
-        _save(results["budget"]["params"], "budget_elasticity.csv")
-    if results.get("modules") is not None:
-        _save(results["modules"]["table"], "module_efficiency.csv")
-    if results.get("cta") is not None:
-        _save(results["cta"]["importance"], "cta_feature_importance.csv")
-    if results.get("okr") is not None:
-        _save(results["okr"].reset_index(), "okr_attribution.csv")
-    return {"report_dir": str(out), "files": sorted(p.name for p in out.glob("*"))}
+# Report exporter lives in src/export.py to keep this module focused.
+from src.export import save_reports  # noqa: E402,F401

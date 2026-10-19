@@ -707,3 +707,100 @@ docker compose up -d --build
 - 邮件发送需配置 `.env` 中的 `SMTP_HOST / SMTP_USER / SMTP_PASSWORD`；未配置时自动写 `reports/email_preview.html`；
 - DockerHub 推送需先 `docker login`；
 - 可选升级：Prophet（替代 STL）、UMAP（替代 PCA）、真实广告/链上 API 抓取。
+
+### 14.13 深度复查新增结果（6.1–6.19 全覆盖）
+
+| 模块 | 结果 |
+| --- | --- |
+| 6.7 漏斗归因 | 整体 CVR 变化中，`trade` 步骤贡献 **+123.77%**，`register` **-17.95%**、`kyc` **-3.57%**、`deposit` **-2.25%** |
+| 6.7 生存分析 | 整体 50% 首充在观察期内未达到；**25% 用户在 1 天内完成首充**；referral/organic/brand_search 中位首充 1 天 |
+| 6.14 流失模型（未来 30 天） | Logistic **AUC 0.7889**（recall 0.6865）、LightGBM **AUC 0.7558**；测试集 churn rate 15.6% |
+| 6.16 VIP 稳定性 | 等级不变率 **78.75%**，升级 **3,830**、降级 **420**、不变 **15,750** |
+| 6.16 标签体系 | fact/stat/model/rule 四类标签，覆盖 **20,000** 用户，人均约 **7.2** 个标签 |
+| 6.17 运营优先级 | champions **1,276**、loyal **975**、promising **176**（优先级分 = 人群 × LTV × 预期提升） |
+| 6.6 MANOVA | 已对 `conversions + clicks ~ C(channel)` 做多因变量检验，结果写入 `roi_manova.csv` |
+
+---
+
+## 19. 深度复查：README 6.1–6.19 ↔ 代码 ↔ 看板逐项对照
+
+> 复查结论：**19/19 全部有计算逻辑、图表、核心结论与字段定义**。原看板仅有 7 个分页、覆盖不足一半模块；本次已重构为单页数据故事并全部补齐。
+
+### 19.1 对照表
+
+| # | 业务点 | 计算函数（`src/modeling.py`） | 看板锚点 | 产物（`reports/results/`） |
+| --- | --- | --- | --- | --- |
+| 6.1 | RFM + 降维细分 | `rfm_segmentation` | `#s61` | `rfm_assignments.csv` / `rfm_personas.csv` / `rfm_metrics.json` |
+| 6.2 | 注册转化漏斗 | `funnel_analysis` | `#s62` | `funnel_daily.csv` / `funnel_last_day.csv` / `funnel_by_*.csv` |
+| 6.3 | 行为序列 + 心理学 | `behavioural_sequences` + `behavioural_validation` | `#s63` | `behaviour_tests.csv` / `behaviour_validation.csv` |
+| 6.4 | 用户路径图 | `flow_paths` | `#s64` | `flow_edges.csv` / `flow_top_paths.csv` |
+| 6.5 | LTV：BG/NBD vs ML | `ltv_models` | `#s65` | `ltv_metrics.csv` / `ltv_predictions.csv` / `ltv_feature_importance.csv` / `ltv_p_alive.csv` |
+| 6.6 | ROI 瀑布 + ANOVA/MANOVA | `roi_waterfall` | `#s66` | `roi_waterfall.csv` / `roi_anova.csv` / `roi_manova.csv` |
+| 6.7 | 漏斗归因 + Cox + KM | `funnel_attribution` + `survival_cox` + `kaplan_meier` | `#s67` | `funnel_attribution.csv` / `cox_hazard_ratios.csv` / `kaplan_meier_curves.csv` |
+| 6.8 | 活动 / 空投增量 ROI | `campaign_incremental_roi` | `#s68` | `campaign_incremental_roi.csv` |
+| 6.9 | 四归因模型对比 | `attribution_models` | `#s69` | `attribution_comparison.csv` / `attribution_meta.json` |
+| 6.10 | Shapley + 渠道分级 | `channel_shapley` | `#s610` | `channel_shapley.csv` |
+| 6.11 | 广告 × 社媒四步相关 | `ads_social_correlation` | `#s611` | `ads_social_matrix.csv` / `ads_social_lag.csv` |
+| 6.12 | 模块效率 + DEA | `module_efficiency` | `#s612` | `module_efficiency.csv` |
+| 6.13 | CTA 全因子实验 | `cta_factorial` | `#s613` | `cta_main_effects.csv` / `cta_interaction.csv` / `cta_feature_importance.csv` |
+| 6.14 | Logistic + 流失 ROC | `logistic_model` + `churn_model` | `#s614` | `logistic_terms.csv` / `churn_metrics.csv` / `churn_roc.csv` |
+| 6.15 | A/B 测试 | `ab_test` | `#s615` | `ab_table.csv` / `ab_meta.json` |
+| 6.16 | 标签体系 + VIP | `vip_mechanism` + `tag_system` | `#s616` | `vip_distribution.csv` / `vip_stability.json` / `tag_coverage.csv` |
+| 6.17 | 精细化运营矩阵 | `refined_ops_matrix` | `#s617` | `ops_matrix.csv` |
+| 6.18 | 预算弹性 + 模拟器 | `budget_elasticity` + `simulate_budget` | `#s618` | `budget_elasticity.csv` / `budget_decomposition.csv` |
+| 6.19 | OKR 归因剥离 | `okr_attribution` | `#s619` | `okr_attribution.csv` |
+
+### 19.2 数据缺口与升级方案（当前无模块报错）
+
+| 6.x | 缺少什么数据 | 影响 | 当前替代方案 | 建议补充 |
+| --- | --- | --- | --- | --- |
+| 6.12 | Hotjar 点击热力坐标、模块级 A/B 分流 | 无法画真实热力图与模块替换实验 | 相对可点击率 + DEA + 路径顺序分析 | 新增 `fact_heatmap_events(x,y,module,ts)` 与 `fact_module_ab(module,variant,user_id)` |
+| 6.14 | PSM / RDD 所需协变量与断点 | 只能做 DID 与分层对比 | DID + 分层 Logistic | 补用户协变量（收入、设备价值）与活动阈值变量 |
+| 6.18 | 真实渠道边际成本曲线 | 弹性是回归近似，不是平台实时曲线 | `conversions ~ log(spend)` + STL | 接入 Google Ads / Meta Ads API 拉真实 spend |
+| 6.8 | 活动随机分流 | 对照组为同渠道非参与者，非严格随机 | 同渠道 DID | 若有随机分流，可升级为真实验/PSM |
+| 6.7 | 更长观察窗（当前 240 天） | KM 整体中位数未达到 50% | 用 p25 与分渠道 KM 解读 | 补 12 个月以上数据，KM 中位数会更稳定 |
+
+> 以上均为**数据增强项，不是代码报错**；19 个模块当前全部可运行、可出图、可出结论。
+
+### 19.3 看板与通知改造（本次）
+
+- **单页滚动**：20 个区块（00 总览 + 6.1–6.19），侧边栏锚点链接 + `scroll-behavior: smooth` 平滑跳转，不再分页；
+- **每个区块三件套**：图表 + 加粗业务结论 + 字段定义与解读；
+- **产物**：`reports/results/` 下 **55 个** CSV/JSON 文件，覆盖全部模块；
+- **三源通知**：`terminal-notifier`（带一句话总结）、Lark webhook、Gmail SMTP(465, SSL)、Playwright 实时看板截图；
+- **实测状态**：terminal-notifier ✅、Lark `StatusCode=0` ✅、邮件 `sent` ✅、截图 **570KB** ✅。
+
+---
+
+## 20. 本次迭代交付补充（看板重构 + 通知 + Docker）
+
+| 类别 | 产物 | 验证结果 |
+| --- | --- | --- |
+| 看板 | 单页 **20 个区块**（00 总览 + 6.1–6.19），侧边栏锚点平滑滚动 | Playwright：**20/20 锚点**；点击 6.19 后 `stMain.scrollTop` 从 0 → **21,884** |
+| 可视化 | 每个区块「图表 + 加粗结论 + 字段定义」 | 19/19 覆盖，正文约 **13,500** 字符 |
+| 产物 | `reports/results/` 下 **55 个** CSV/JSON | 全部生成 |
+| macOS 通知 | `terminal-notifier`，带一句话业务总结 | ✅ 实测 |
+| Lark | Webhook 文本卡片 | ✅ `StatusCode=0` |
+| 邮件 | Gmail SMTP **465 (SSL)** | ✅ `sent` 到 dingbangchu@gmail.com |
+| 截图 | Playwright 滚动拼接长图 | ✅ **1440 × 23,150**（3.76 MB） |
+| Docker | `bonnie333333333/cex-customer-analytics:latest` | ✅ 本地 build、容器 8502 健康 200、20/20 锚点 |
+
+### 20.1 直接用镜像启动
+
+```bash
+docker run -d --name cex-dashboard -p 8501:8501 \
+  -v "$(pwd)/warehouse.duckdb:/app/warehouse.duckdb" \
+  -v "$(pwd)/reports:/app/reports" \
+  bonnie333333333/cex-customer-analytics:latest
+# http://localhost:8501
+```
+
+> 镜像只包含看板运行依赖；`warehouse.duckdb` 与 `reports/` 通过 volume 挂载，保证数据与算法产物始终是最新的。
+
+### 20.2 一句话总结的通知示例
+
+`terminal-notifier` 与 Lark 推送的 summary 形如：
+
+```
+20,000 users | deposit 42.1% | GMV $78.8M | 90d churn 62.2% | ⚠ 90 天流失率: 当前 62.21%
+```

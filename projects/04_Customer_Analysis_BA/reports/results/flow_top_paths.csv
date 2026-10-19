@@ -1,0 +1,13 @@
+path,sessions
+view_home > view_market > view_tutorial > click_task > submit_kyc,3891
+view_home > view_market > view_tutorial > submit_kyc,3259
+view_home > view_market > view_tutorial > click_task > submit_kyc > deposit_start > deposit_success > first_trade,2602
+view_home > view_market > click_task > submit_kyc,2414
+view_home > view_market > view_tutorial > submit_kyc > deposit_start > deposit_success > first_trade,2101
+view_home > view_market > submit_kyc,2008
+view_home > view_market > click_task > submit_kyc > deposit_start > deposit_success > first_trade,1550
+view_home > view_market > submit_kyc > deposit_start > deposit_success > first_trade,1359
+view_home > view_market > view_tutorial > click_task > submit_kyc > deposit_start > deposit_success,283
+view_home > view_market > view_tutorial > submit_kyc > deposit_start > deposit_success,217
+view_home > view_market > click_task > submit_kyc > deposit_start > deposit_success,169
+view_home > view_market > submit_kyc > deposit_start > deposit_success,147

@@ -1,0 +1,5 @@
+tier,rule,fee_discount,benefits
+VIP0,score < P50,0%,基础费率、标准客服
+VIP1,P50 - P80,5%,费率折扣、优先客服
+VIP2,P80 - P95,10%,更高折扣、专属活动、快速提现
+VIP3,> P95,15%,专属客户经理、定制额度、线下活动

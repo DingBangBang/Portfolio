@@ -1,0 +1,6 @@
+campaign_id,name,channel,participants,cost,treated_pre,treated_post,control_pre,control_post,incremental_per_user,incremental_revenue,incremental_roi
+c000645,organic_campaign_0645,organic,45,1509.35,353.88,995.23,1251.73,2349.23,-456.15,-19614.27,-12.9952
+c001059,organic_campaign_1059,organic,39,1414.13,134.25,98.98,65.88,164.53,-133.91,-5222.67,-3.6932
+c000534,organic_campaign_0534,organic,39,1107.34,359.38,683.96,732.4,1130.27,-73.29,-2858.27,-2.5812
+c000916,google_ads_campaign_0916,google_ads,38,735.0,0.0,0.0,0.0,10.74,-10.74,-408.01,-0.5551
+c000323,organic_campaign_0323,organic,38,1280.7,131.64,525.21,546.63,867.06,73.15,2779.77,2.1705

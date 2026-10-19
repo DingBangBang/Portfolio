@@ -4,6 +4,7 @@ venv/
 env/
 .env
 .env.*
+!.env.example
 
 # ----- 缓存 -----
 __pycache__/

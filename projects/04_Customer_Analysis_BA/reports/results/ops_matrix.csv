@@ -1,0 +1,8 @@
+segment,users,deposit_rate,avg_ltv_90d,revenue,strategy,target_metric,guardrail,expected_uplift,priority_score
+champions,3726,1.0,11.4163,49984.0,VIP 权益 + 专属客服,retention_rate,服务成本/人,0.03,1276.11
+loyal,2985,1.0,6.5321,25399.24,跨品类推荐 + 手续费折扣,ARPU,折扣侵蚀,0.05,974.92
+promising,715,1.0,3.0838,3019.02,交易任务 + 品类引导,trade_frequency,奖励成本,0.08,176.39
+need_attention,155,1.0,1.5704,331.04,限时任务 + 分层召回,reactivation_rate,打扰率,0.06,14.61
+at_risk,25,1.0,0.6319,20.86,大额召回券 + 1v1 触达,churn_rate,补贴成本,0.1,1.58
+hibernating,6,1.0,0.1946,1.17,低频内容种草 + 被动召回,reactivation_rate,退订率,0.04,0.05
+never_traded,12388,0.0659,0.0,0.0,新手任务 + 模拟盘,first_trade_rate,转化质量,0.07,0.0

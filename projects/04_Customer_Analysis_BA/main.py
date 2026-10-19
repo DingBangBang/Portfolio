@@ -98,6 +98,7 @@ def main() -> int:
     parser.add_argument("--no-email", action="store_true")
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--no-notify", action="store_true")
+    parser.add_argument("--no-lark", action="store_true")
     parser.add_argument("--port", type=int, default=8501)
     args = parser.parse_args()
 
@@ -158,10 +159,14 @@ def main() -> int:
                                             "Channel performance": results.get("shapley") if isinstance(results.get("shapley"), pd.DataFrame) else None,
                                             "A/B test": (results.get("ab") or {}).get("table") if results.get("ab") else None},
                                     screenshot=screenshot_path if shot.get("ok") else None)
+    summary = notifier.build_summary(run_ok, kpis, insights)
+    status["summary"] = summary
     if not args.no_notify:
         status["steps"]["mac_notify"] = notifier.mac_notify(
             "CEX Analytics pipeline", "Succeeded" if run_ok else "Failed",
-            f"users={kpis.get('users', 0):,}" if kpis else "")
+            "daily run", summary=summary)
+    if not args.no_lark:
+        status["steps"]["lark"] = notifier.lark_notify(summary, run_ok, kpis, insights)
     if healthy and not args.no_browser:
         status["steps"]["browser"] = notifier.open_browser(settings.DASHBOARD_URL)
     if not args.no_email:

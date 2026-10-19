@@ -703,3 +703,100 @@ docker compose up -d --build
 - Email requires `SMTP_HOST / SMTP_USER / SMTP_PASSWORD` in `.env`; otherwise a local `reports/email_preview.html` is written;
 - DockerHub push requires `docker login` first;
 - Optional upgrades: Prophet (instead of STL), UMAP (instead of PCA), real ad/on-chain API ingestion.
+
+### 14.13 Deep-review results (full 6.1–6.19 coverage)
+
+| Module | Result |
+| --- | --- |
+| 6.7 funnel attribution | `trade` contributes **+123.77%** to the overall CVR change, `register` **-17.95%**, `kyc` **-3.57%**, `deposit` **-2.25%** |
+| 6.7 survival | Overall 50% first-deposit is not reached within the observation window; **25% of users deposit within 1 day**; referral/organic/brand_search median = 1 day |
+| 6.14 churn (next 30 days) | Logistic **AUC 0.7889** (recall 0.6865), LightGBM **AUC 0.7558**; test churn rate 15.6% |
+| 6.16 VIP stability | Tier-unchanged rate **78.75%**, upgrades **3,830**, downgrades **420**, unchanged **15,750** |
+| 6.16 tags | fact/stat/model/rule tags covering **20,000** users, ~**7.2** tags per user |
+| 6.17 ops priority | champions **1,276**, loyal **975**, promising **176** (priority = users × LTV × expected uplift) |
+| 6.6 MANOVA | `conversions + clicks ~ C(channel)` multivariate test, written to `roi_manova.csv` |
+
+---
+
+## 19. Deep Review: README 6.1–6.19 ↔ code ↔ dashboard
+
+> Conclusion: **19/19 sections have computation logic, charts, a bold business conclusion and field definitions**. The old dashboard had only 7 pages and covered less than half of the modules; it has been rebuilt as a single-page data story with full coverage.
+
+### 19.1 Coverage matrix
+
+| # | Topic | Function (`src/modeling.py`) | Dashboard anchor | Artefacts (`reports/results/`) |
+| --- | --- | --- | --- | --- |
+| 6.1 | RFM + dimensionality reduction | `rfm_segmentation` | `#s61` | `rfm_assignments.csv` / `rfm_personas.csv` / `rfm_metrics.json` |
+| 6.2 | Conversion funnel | `funnel_analysis` | `#s62` | `funnel_daily.csv` / `funnel_last_day.csv` / `funnel_by_*.csv` |
+| 6.3 | Behavioural sequence + psychology | `behavioural_sequences` + `behavioural_validation` | `#s63` | `behaviour_tests.csv` / `behaviour_validation.csv` |
+| 6.4 | User flow graph | `flow_paths` | `#s64` | `flow_edges.csv` / `flow_top_paths.csv` |
+| 6.5 | LTV: BG/NBD vs ML | `ltv_models` | `#s65` | `ltv_metrics.csv` / `ltv_predictions.csv` / `ltv_feature_importance.csv` / `ltv_p_alive.csv` |
+| 6.6 | ROI waterfall + ANOVA/MANOVA | `roi_waterfall` | `#s66` | `roi_waterfall.csv` / `roi_anova.csv` / `roi_manova.csv` |
+| 6.7 | Funnel attribution + Cox + KM | `funnel_attribution` + `survival_cox` + `kaplan_meier` | `#s67` | `funnel_attribution.csv` / `cox_hazard_ratios.csv` / `kaplan_meier_curves.csv` |
+| 6.8 | Campaign incremental ROI | `campaign_incremental_roi` | `#s68` | `campaign_incremental_roi.csv` |
+| 6.9 | Four attribution models | `attribution_models` | `#s69` | `attribution_comparison.csv` / `attribution_meta.json` |
+| 6.10 | Shapley + channel grading | `channel_shapley` | `#s610` | `channel_shapley.csv` |
+| 6.11 | Ads × social four-step correlation | `ads_social_correlation` | `#s611` | `ads_social_matrix.csv` / `ads_social_lag.csv` |
+| 6.12 | Module efficiency + DEA | `module_efficiency` | `#s612` | `module_efficiency.csv` |
+| 6.13 | CTA full-factorial | `cta_factorial` | `#s613` | `cta_main_effects.csv` / `cta_interaction.csv` / `cta_feature_importance.csv` |
+| 6.14 | Logistic + churn ROC | `logistic_model` + `churn_model` | `#s614` | `logistic_terms.csv` / `churn_metrics.csv` / `churn_roc.csv` |
+| 6.15 | A/B test | `ab_test` | `#s615` | `ab_table.csv` / `ab_meta.json` |
+| 6.16 | Tag system + VIP | `vip_mechanism` + `tag_system` | `#s616` | `vip_distribution.csv` / `vip_stability.json` / `tag_coverage.csv` |
+| 6.17 | Refined-ops matrix | `refined_ops_matrix` | `#s617` | `ops_matrix.csv` |
+| 6.18 | Budget elasticity + simulator | `budget_elasticity` + `simulate_budget` | `#s618` | `budget_elasticity.csv` / `budget_decomposition.csv` |
+| 6.19 | OKR attribution stripping | `okr_attribution` | `#s619` | `okr_attribution.csv` |
+
+### 19.2 Data gaps and upgrade paths (no module is currently failing)
+
+| 6.x | Missing data | Impact | Current substitute | Suggested addition |
+| --- | --- | --- | --- | --- |
+| 6.12 | Hotjar heatmap coordinates, module-level A/B split | Cannot draw a real heatmap or module-replacement test | Relative clickability + DEA + path-order analysis | Add `fact_heatmap_events(x,y,module,ts)` and `fact_module_ab(module,variant,user_id)` |
+| 6.14 | Covariates / thresholds for PSM or RDD | Only DID and stratified comparison are possible | DID + stratified logistic | Add user covariates (income, device value) and campaign thresholds |
+| 6.18 | Real channel marginal-cost curve | Elasticity is a regression approximation | `conversions ~ log(spend)` + STL | Connect Google Ads / Meta Ads APIs for real spend |
+| 6.8 | Random campaign assignment | Control group is same-channel non-participants | Same-channel DID | With random assignment, upgrade to a true experiment / PSM |
+| 6.7 | Longer observation window (currently 240 days) | Overall KM median never reaches 50% | Use p25 and per-channel KM | Add 12+ months of data for a stable KM median |
+
+> These are **data-enhancement items, not code errors**; all 19 modules currently run, chart and produce conclusions.
+
+### 19.3 Dashboard & notification upgrade (this iteration)
+
+- **Single-page scroll**: 20 blocks (00 overview + 6.1–6.19), sidebar anchor links + `scroll-behavior: smooth`, no page switching;
+- **Three pieces per block**: chart + bold business conclusion + field definitions;
+- **Artefacts**: **55** CSV/JSON files under `reports/results/`, covering every module;
+- **Three-source notifications**: `terminal-notifier` (with a one-line summary), Lark webhook, Gmail SMTP (465, SSL), Playwright live-dashboard screenshot;
+- **Verified**: terminal-notifier ✅, Lark `StatusCode=0` ✅, email `sent` ✅, screenshot **570 KB** ✅.
+
+---
+
+## 20. This Iteration's Deliverables (dashboard + notifications + Docker)
+
+| Category | Artefact | Verification |
+| --- | --- | --- |
+| Dashboard | Single page with **20 blocks** (00 overview + 6.1–6.19), sidebar anchors with smooth scroll | Playwright: **20/20 anchors**; clicking 6.19 moves `stMain.scrollTop` from 0 to **21,884** |
+| Visualisation | Every block has a chart + bold conclusion + field definitions | 19/19 covered, ~**13,500** characters of body text |
+| Artefacts | **55** CSV/JSON files under `reports/results/` | all generated |
+| macOS notification | `terminal-notifier` with a one-line business summary | ✅ verified |
+| Lark | Webhook text card | ✅ `StatusCode=0` |
+| Email | Gmail SMTP **465 (SSL)** | ✅ `sent` to dingbangchu@gmail.com |
+| Screenshot | Playwright scroll-and-stitch long image | ✅ **1440 × 23,150** (3.76 MB) |
+| Docker | `bonnie333333333/cex-customer-analytics:latest` | ✅ local build, container healthy on 8502, 20/20 anchors |
+
+### 20.1 Run from the image
+
+```bash
+docker run -d --name cex-dashboard -p 8501:8501 \
+  -v "$(pwd)/warehouse.duckdb:/app/warehouse.duckdb" \
+  -v "$(pwd)/reports:/app/reports" \
+  bonnie333333333/cex-customer-analytics:latest
+# http://localhost:8501
+```
+
+> The image ships dashboard runtime dependencies only; `warehouse.duckdb` and `reports/` are mounted so data and analytics artefacts stay current.
+
+### 20.2 One-line notification summary
+
+The `terminal-notifier` and Lark payload looks like:
+
+```
+20,000 users | deposit 42.1% | GMV $78.8M | 90d churn 62.2% | ⚠ 90 天流失率: 当前 62.21%
+```

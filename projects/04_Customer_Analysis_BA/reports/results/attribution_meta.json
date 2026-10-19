@@ -1,0 +1,6 @@
+{
+  "base_conversion_rate": 0.4214,
+  "n_users": 20000,
+  "n_touchpoints": 59571,
+  "recommended": "markov_chain"
+}

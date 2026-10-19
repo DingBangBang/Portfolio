@@ -1,0 +1,6 @@
+step,cvr_current,cvr_previous,delta_pp,log_delta,contribution_pct
+visit,1.0,1.0,0.0,0.0,0.0
+register,0.6176,0.6219,-0.43,-0.007,-17.95
+kyc,0.7071,0.7081,-0.1,-0.0014,-3.57
+deposit,0.5959,0.5965,-0.05,-0.0009,-2.25
+trade,0.885,0.8433,4.17,0.0483,123.77

@@ -1,0 +1,11 @@
+event_name,next_event,weight
+view_home,view_market,20000
+view_market,view_tutorial,12353
+click_task,submit_kyc,10909
+deposit_start,deposit_success,8428
+submit_kyc,deposit_start,8428
+deposit_success,first_trade,7612
+view_tutorial,click_task,6776
+view_tutorial,submit_kyc,5577
+view_market,click_task,4133
+view_market,submit_kyc,3514

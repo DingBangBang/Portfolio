@@ -1,0 +1,13 @@
+.git
+.env
+data/
+logs/
+warehouse.duckdb
+*.duckdb
+*.duckdb.wal
+dbt_project/target/
+dbt_project/logs/
+dbt_project/dbt_packages/
+__pycache__/
+*.pyc
+reports/

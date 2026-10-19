@@ -126,3 +126,51 @@
 | 浏览器打开 | 成功 |
 | 邮件 | SMTP 未配置，已写本地预览 `reports/email_preview.html` |
 | Docker | **未完成**：本机 Docker daemon 无法启动（重试 2 次仍失败），需人工处理 |
+
+## 8. 看板重构阶段的问题与修复
+
+### Bug 8 · 看板 6.1 崩溃（Plotly 索引长度不一致）
+
+- **现象**：页面渲染到 6.1 就出现 `narwhals.exceptions.ShapeError: Expected object of length 7612, got length: 6000`；
+- **原因**：`px.scatter(rfm.sample(6000), ..., color=rfm["cluster"])` 把「抽样后的 data_frame」和「全量 Series」混用；
+- **修复**：先抽样并 `copy()`，再用列名字符串 `color="cluster"`。
+
+### Bug 9 · Cox 导出列名不一致
+
+- **现象**：6.7 报 `Value of 'y' is not the name of a column ... received: feature`；
+- **原因**：`cph.summary` 的索引名是 `covariate`，`reset_index()` 不会生成 `index` 列，原来的 `rename(columns={"index":"feature"})` 无效；
+- **修复**：显式把首列重命名为 `feature`，看板同时兼容 `feature` / `covariate`。
+
+### Bug 10 · 流失模型标签泄漏（AUC=1.0）
+
+- **现象**：首版 churn 模型 AUC 接近 1.0，明显不可信；
+- **原因**：标签 `churn_90d` 由「距上次交易天数」定义，而特征里又包含 `recency_days` 与 `ltv_90d`，属于直接泄漏；
+- **修复**：改为**未来 30 天流失**：以 `anchor-30d` 为 cutoff，特征只用 cutoff 之前的数据，标签为 cutoff 之后是否交易；
+- **结果**：Logistic AUC 0.7889、LightGBM 0.7558，churn rate 15.6%，可信。
+
+### Bug 11 · VIP 分层稳定性失真
+
+- **现象**：等级不变率只有 13.75%，降级 16,287 人；
+- **原因**：上一期用 `rank(pct=True)` 分层，而绝大多数用户上一期交易额为 0，并列排名被算成 1.0，直接落到 VIP3；
+- **修复**：改用当前 90 天交易额的绝对分位数阈值（P50/P80/P95），两期使用同一组阈值；
+- **结果**：不变率 78.75%，升级 3,830、降级 420，符合业务直觉。
+
+### Bug 12 · KM 中位数 Infinity / NaN
+
+- **现象**：整体首充率不足 50%，KM 中位生存时间为 `inf`，JSON 里出现 `Infinity`/`NaN`；
+- **修复**：中位数/分位数统一做 `isfinite` 检查，非有限值转为 `null`，并补充 25% 分位时间；
+- **结果**：整体 50% 首充在观察期内未达到，25% 用户在 1 天内完成首充。
+
+### Bug 13 · Playwright 截图只截到视口
+
+- **现象**：`dashboard_screenshot.png` 始终是 1440×2200，没有覆盖 20 个区块；
+- **原因**：Streamlit 的滚动发生在 `section[data-testid="stMain"]` 内部，`full_page=True` 只按 document 高度截图；
+- **修复**：截图前注入 CSS，把 `stMain` / `stAppViewContainer` / `body` 的 `height` 设为 `auto`、`overflow` 设为 `visible`，再 `full_page=True`；
+- **结果**：截图为完整长图（高度随内容增长）。
+
+## 9. 看板交互验证（Playwright）
+
+- 20/20 锚点存在（`overview` + `s61`…`s619`）；
+- 点击侧边栏「6.19 OKR 归因剥离」后，`section[data-testid="stMain"]` 的 `scrollTop` 从 0 变为 **21,884**，目标元素顶部约 60px，验证平滑滚动生效；
+- 页面正文长度约 **13,500** 字符，19 个模块全部渲染；
+- Docker 容器内同样 20/20 锚点、正文约 **13,500** 字符，验证镜像与挂载数据一致。

@@ -1,0 +1,3 @@
+model,AUC,accuracy,precision,recall,f1,n_test,churn_rate
+LogisticRegression,0.7889,0.7125,0.3098,0.6865,0.4269,1186,0.156
+LightGBM,0.7558,0.7673,0.327,0.4649,0.3839,1186,0.156

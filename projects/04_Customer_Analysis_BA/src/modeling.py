@@ -325,6 +325,11 @@ def ltv_models(con) -> dict:
         model = HistGradientBoostingRegressor(random_state=42)
         algo = "HistGradientBoosting(GBDT fallback)"
     model.fit(X[tr], y[tr])
+    importance = None
+    if hasattr(model, "feature_importances_"):
+        importance = (pd.DataFrame({"feature": X.columns,
+                                    "importance": np.round(model.feature_importances_, 4)})
+                      .sort_values("importance", ascending=False))
     pred = np.clip(model.predict(X[te]), 0, None)
     ml_metrics = {"model": algo, "MAE": round(float(mean_absolute_error(y[te], pred)), 4),
                   "RMSE": round(float(np.sqrt(mean_squared_error(y[te], pred))), 4),
@@ -345,6 +350,7 @@ def ltv_models(con) -> dict:
         "monetary_value": g["monetary"],
     })
     bg_metrics = {"model": "BG/NBD + Gamma-Gamma", "status": "skipped"}
+    bgf = None
     try:
         from lifetimes import BetaGeoFitter, GammaGammaFitter
         bgf = None
@@ -375,10 +381,21 @@ def ltv_models(con) -> dict:
     except Exception as exc:  # pragma: no cover
         bg_metrics["error"] = str(exc)[:200]
 
+    p_alive = None
+    if bgf is not None:
+        try:
+            p_alive = pd.DataFrame({
+                "user_id": summary.index,
+                "p_alive": np.round(bgf.conditional_probability_alive(
+                    summary["frequency"], summary["recency"], summary["T"]).values, 4)})
+        except Exception:
+            p_alive = None
+
     pred_df = df.loc[te, ["user_id", "ltv_90d"]].copy()
     pred_df["predicted_ltv_90d"] = pred
     metrics = pd.DataFrame([ml_metrics, bg_metrics])
-    return {"metrics": metrics, "predictions": pred_df, "cutoff": str(cutoff.date())}
+    return {"metrics": metrics, "predictions": pred_df, "cutoff": str(cutoff.date()),
+            "feature_importance": importance, "p_alive": p_alive}
 
 
 # ----------------------------------------------------------------
@@ -408,7 +425,9 @@ def survival_cox(con) -> pd.DataFrame:
     s.columns = ["coef", "hazard_ratio", "p_value"]
     s["hazard_ratio"] = s["hazard_ratio"].round(3)
     s["p_value"] = s["p_value"].round(5)
-    return s.sort_values("hazard_ratio", ascending=False).reset_index().rename(columns={"index": "feature"})
+    out = s.sort_values("hazard_ratio", ascending=False).reset_index()
+    out = out.rename(columns={out.columns[0]: "feature"})
+    return out
 
 
 # ----------------------------------------------------------------
@@ -435,8 +454,25 @@ def roi_waterfall(con) -> dict:
         anova_rows = tab.to_dict("records")
     except Exception as exc:
         anova_rows = [{"error": str(exc)[:200]}]
+
+    manova_rows = []
+    try:
+        from statsmodels.multivariate.manova import MANOVA
+        mv = MANOVA.from_formula("conversions + clicks ~ C(channel)", data=daily.dropna())
+        res = mv.mv_test().results
+        for dv, payload in res.items():
+            stat = payload.get("stat")
+            if stat is None:
+                continue
+            for effect, row in stat.iterrows():
+                manova_rows.append({"dependent": dv, "effect": effect,
+                                    "F": round(float(row.get("F", np.nan)), 4),
+                                    "p_value": round(float(row.get("Pr > F", np.nan)), 6)})
+    except Exception as exc:
+        manova_rows = [{"error": str(exc)[:200]}]
+
     return {"overall_roi": round(float(overall), 4), "waterfall": waterfall,
-            "anova": pd.DataFrame(anova_rows)}
+            "anova": pd.DataFrame(anova_rows), "manova": pd.DataFrame(manova_rows)}
 
 
 # ----------------------------------------------------------------
@@ -621,7 +657,9 @@ def ab_test(con) -> dict:
     chi2, srm_p, _, _ = chi2_contingency([[c["conversions"], c["n"] - c["conversions"]],
                                           [t["conversions"], t["n"] - t["conversions"]]])
     srm_chi2, srm_p2, _, _ = chi2_contingency([[c["n"], c["n"]], [t["n"], t["n"]]])
+    mde = (1.96 + 0.84) * se if se else np.nan
     return {"table": g.round(4), "abs_lift": round(float(p2 - p1), 4),
+            "mde_pp": round(float(mde), 4),
             "rel_lift_pct": round(float((p2 - p1) / p1 * 100), 2) if p1 else None,
             "z": round(float(z), 3), "p_value": pval,
             "ci95": (round(float(ci[0]), 4), round(float(ci[1]), 4)),
@@ -700,17 +738,362 @@ def okr_attribution(con) -> pd.DataFrame:
 
 
 # ----------------------------------------------------------------
+# 6.7a Funnel attribution (decompose the change in overall CVR)
+# ----------------------------------------------------------------
+def funnel_attribution(con, window_days: int = 30) -> dict:
+    daily = q(con, "select * from marts.mart_funnel_daily order by period")
+    daily["period"] = pd.to_datetime(daily["period"])
+    end = daily["period"].max()
+    steps = ["visit", "register", "kyc", "deposit", "trade"]
+
+    def window_counts(lo, hi):
+        sub = daily[(daily["period"] > lo) & (daily["period"] <= hi)]
+        return sub.groupby("step")["user_cnt"].mean()
+
+    cur = window_counts(end - pd.Timedelta(days=window_days), end)
+    prev = window_counts(end - pd.Timedelta(days=2 * window_days), end - pd.Timedelta(days=window_days))
+
+    def cvrs(c):
+        out = {"visit": 1.0}
+        for i, step in enumerate(steps[1:], start=1):
+            out[step] = c[step] / c[steps[i - 1]] if c[steps[i - 1]] else np.nan
+        return out
+
+    cc, pc = cvrs(cur), cvrs(prev)
+    overall_cur = cur["trade"] / cur["visit"]
+    overall_prev = prev["trade"] / prev["visit"]
+    dlog = np.log(overall_cur) - np.log(overall_prev)
+    rows = []
+    for step in steps:
+        dl = (np.log(cc[step]) - np.log(pc[step])) if (cc[step] > 0 and pc[step] > 0) else np.nan
+        contrib = (dl / dlog * 100) if (dlog not in (0, np.nan) and not np.isnan(dl)) else np.nan
+        rows.append({"step": step, "cvr_current": round(float(cc[step]), 4),
+                     "cvr_previous": round(float(pc[step]), 4),
+                     "delta_pp": round(float(cc[step] - pc[step]) * 100, 2),
+                     "log_delta": round(float(dl), 4) if not np.isnan(dl) else np.nan,
+                     "contribution_pct": round(float(contrib), 2) if not np.isnan(contrib) else np.nan})
+    return {"table": pd.DataFrame(rows), "overall_current": round(float(overall_cur), 4),
+            "overall_previous": round(float(overall_prev), 4),
+            "delta_pp": round(float(overall_cur - overall_prev) * 100, 2),
+            "window_days": window_days}
+
+
+# ----------------------------------------------------------------
+# 6.7b Kaplan-Meier survival curves
+# ----------------------------------------------------------------
+def kaplan_meier(con, top_n: int = 4) -> dict:
+    df = q(con, """
+        select user_id, register_time, first_deposit_time, register_channel
+        from marts.mart_user_360
+    """)
+    df["register_time"] = pd.to_datetime(df["register_time"])
+    df["first_deposit_time"] = pd.to_datetime(df["first_deposit_time"])
+    anchor = df["register_time"].max() + pd.Timedelta(days=1)
+    end = df["first_deposit_time"].fillna(anchor)
+    df["duration"] = ((end - df["register_time"]).dt.total_seconds() / 86400).clip(lower=1)
+    df["event"] = df["first_deposit_time"].notna().astype(int)
+
+    from lifelines import KaplanMeierFitter
+    curves, medians = [], []
+
+    def add_curve(sub, label):
+        kmf = KaplanMeierFitter()
+        kmf.fit(sub["duration"], event_observed=sub["event"], label=label)
+        sf = kmf.survival_function_.reset_index()
+        sf.columns = ["time", "survival"]
+        sf["group"] = label
+        curves.append(sf)
+        med = kmf.median_survival_time_
+        try:
+            _p = kmf.percentile(0.75)
+            p25 = float(_p) if (_p is not None and np.isfinite(_p)) else None
+        except Exception:
+            p25 = None
+        medians.append({"group": label, "n": int(len(sub)),
+                        "median_days": None if (med is None or np.isinf(med) or np.isnan(med)) else float(med),
+                        "p25_days": p25})
+
+    add_curve(df, "all")
+    for ch, sub in df.groupby("register_channel"):
+        if len(sub) >= 200:
+            add_curve(sub, ch)
+    out = pd.concat(curves, ignore_index=True)
+    med = pd.DataFrame(medians).sort_values("median_days")
+    overall = med.loc[med["group"] == "all", "median_days"].iloc[0]
+    overall_p25 = med.loc[med["group"] == "all", "p25_days"].iloc[0]
+    return {"curves": out, "median": med,
+            "overall_median_days": None if (overall is None or np.isinf(overall) or np.isnan(overall)) else float(overall),
+            "overall_p25_days": None if overall_p25 is None else float(overall_p25)}
+
+
+# ----------------------------------------------------------------
+# 6.3b Behavioural external validation (region split)
+# ----------------------------------------------------------------
+def behavioural_validation(con) -> pd.DataFrame:
+    ev = q(con, """
+        select e.user_id, e.event_name, e.event_time, u.register_time, u.kyc_area
+        from staging.stg_events e join staging.stg_users u using (user_id)
+    """)
+    ev["in_first_hour"] = ((pd.to_datetime(ev["event_time"]) - pd.to_datetime(ev["register_time"]))
+                            .dt.total_seconds().between(0, 3600))
+    flags = (ev[ev["in_first_hour"]].assign(v=1)
+             .pivot_table(index="user_id", columns="event_name", values="v", aggfunc="max", fill_value=0))
+    for c in ["view_tutorial", "click_task", "submit_kyc", "deposit_start"]:
+        if c not in flags.columns:
+            flags[c] = 0
+    target = q(con, "select user_id, is_deposited, kyc_area from marts.mart_user_360")
+    m = target.merge(flags.reset_index(), on="user_id", how="left").fillna(0)
+    m["region_group"] = np.where(m["kyc_area"] == "BRAZIL", "BRAZIL", "non_BRAZIL")
+    from scipy.stats import ttest_ind
+    rows = []
+    for group, sub in m.groupby("region_group"):
+        for c in ["view_tutorial", "click_task", "submit_kyc", "deposit_start"]:
+            a = sub.loc[sub["is_deposited"] == 1, c]
+            b = sub.loc[sub["is_deposited"] == 0, c]
+            t, p = ttest_ind(a, b, equal_var=False)
+            rows.append({"region_group": group, "behaviour": c,
+                         "deposited_mean": round(float(a.mean()), 4),
+                         "non_deposited_mean": round(float(b.mean()), 4),
+                         "diff": round(float(a.mean() - b.mean()), 4),
+                         "p_value": float(p), "n": int(len(sub))})
+    return pd.DataFrame(rows)
+
+
+# ----------------------------------------------------------------
+# 6.14b Churn classifier comparison (ROC + feature importance)
+# ----------------------------------------------------------------
+def churn_model(con) -> dict:
+    """Future-30-day churn classifier.
+
+    Label = no trade in (cutoff, anchor]; every feature is computed up to
+    ``cutoff``, so recency is a legitimate predictor instead of label leakage.
+    """
+    tx = q(con, "select user_id, tx_time, quote_amt, fee from staging.stg_transactions")
+    users = q(con, """
+        select user_id, register_time, register_channel, register_device_type, kyc_area
+        from staging.stg_users
+    """)
+    tx["tx_time"] = pd.to_datetime(tx["tx_time"])
+    users["register_time"] = pd.to_datetime(users["register_time"])
+    anchor = tx["tx_time"].max()
+    cutoff_ts = anchor - pd.Timedelta(days=30)
+
+    pre = tx[tx["tx_time"] <= cutoff_ts]
+    agg = (pre.groupby("user_id")
+              .agg(last_tx=("tx_time", "max"), frequency=("quote_amt", "count"),
+                   monetary=("quote_amt", "sum"), revenue=("fee", "sum"),
+                   avg_ticket=("quote_amt", "mean")).reset_index())
+    feat = users.merge(agg, on="user_id", how="left")
+    feat = feat[feat["register_time"] <= cutoff_ts].copy()
+    feat["recency_days"] = (cutoff_ts - feat["last_tx"]).dt.days
+    feat["tenure_days"] = (cutoff_ts - feat["register_time"]).dt.days
+    feat = feat.fillna({"frequency": 0, "monetary": 0, "revenue": 0, "avg_ticket": 0})
+    feat["recency_days"] = feat["recency_days"].fillna(feat["tenure_days"])
+
+    future = set(tx.loc[tx["tx_time"] > cutoff_ts, "user_id"].unique())
+    feat["churn_next_30d"] = (~feat["user_id"].isin(future)).astype(int)
+    df = feat[feat["frequency"] > 0].copy()  # only previously active users
+
+    num = ["recency_days", "tenure_days", "frequency", "monetary", "revenue", "avg_ticket"]
+    cat = ["register_channel", "register_device_type", "kyc_area"]
+    X = pd.concat([df[num].fillna(0), pd.get_dummies(df[cat], drop_first=True)], axis=1)
+    y = df["churn_next_30d"].astype(int)
+
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import (accuracy_score, f1_score, precision_score,
+                                 recall_score, roc_auc_score, roc_curve)
+    from sklearn.model_selection import train_test_split
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    idx_tr, idx_te = train_test_split(np.arange(len(df)), test_size=0.2,
+                                      random_state=42, stratify=y.to_numpy())
+    tr = np.zeros(len(df), dtype=bool); tr[idx_tr] = True
+    te = ~tr
+    if y[te].nunique() < 2 or y[tr].nunique() < 2:
+        raise RuntimeError("churn target has a single class in train/test split")
+
+    models = {}
+    models["LogisticRegression"] = Pipeline([("sc", StandardScaler()),
+                                             ("m", LogisticRegression(max_iter=1000, class_weight="balanced"))])
+    try:
+        from lightgbm import LGBMClassifier
+        models["LightGBM"] = LGBMClassifier(n_estimators=300, learning_rate=0.05, num_leaves=31,
+                                            random_state=42, verbose=-1, class_weight="balanced")
+    except Exception:
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        models["HistGradientBoosting"] = HistGradientBoostingClassifier(random_state=42)
+
+    metrics, roc_rows, importance_frames = [], [], []
+    for name, model in models.items():
+        model.fit(X[tr], y[tr])
+        proba = model.predict_proba(X[te])[:, 1]
+        pred = (proba >= 0.5).astype(int)
+        metrics.append({"model": name, "AUC": round(float(roc_auc_score(y[te], proba)), 4),
+                        "accuracy": round(float(accuracy_score(y[te], pred)), 4),
+                        "precision": round(float(precision_score(y[te], pred, zero_division=0)), 4),
+                        "recall": round(float(recall_score(y[te], pred, zero_division=0)), 4),
+                        "f1": round(float(f1_score(y[te], pred, zero_division=0)), 4),
+                        "n_test": int(te.sum()), "churn_rate": round(float(y[te].mean()), 4)})
+        fpr, tpr, _ = roc_curve(y[te], proba)
+        roc_rows.append(pd.DataFrame({"model": name, "fpr": fpr, "tpr": tpr}))
+        est = model.named_steps["m"] if hasattr(model, "named_steps") else model
+        if hasattr(est, "feature_importances_"):
+            imp = est.feature_importances_
+        elif hasattr(est, "coef_"):
+            imp = np.abs(est.coef_[0])
+        else:
+            continue
+        importance_frames.append(pd.DataFrame({"model": name, "feature": X.columns,
+                                               "importance": np.round(imp, 4)}))
+    importance = (pd.concat(importance_frames).sort_values(["model", "importance"], ascending=[True, False])
+                  if importance_frames else pd.DataFrame())
+    return {"metrics": pd.DataFrame(metrics), "roc": pd.concat(roc_rows, ignore_index=True),
+            "importance": importance,
+            "cutoff": f"future_30d@{cutoff_ts.date()}", "n_users": int(len(df))}
+
+
+# ----------------------------------------------------------------
+# 6.16a VIP mechanism (tiering + reshuffle stability + benefits)
+# ----------------------------------------------------------------
+def vip_mechanism(con) -> dict:
+    tx = q(con, "select user_id, tx_time, quote_amt from staging.stg_transactions")
+    tx["tx_time"] = pd.to_datetime(tx["tx_time"])
+    anchor = tx["tx_time"].max()
+    cur_start = anchor - pd.Timedelta(days=90)
+    prev_start = anchor - pd.Timedelta(days=180)
+    cur = (tx[tx["tx_time"] > cur_start].groupby("user_id")
+           .agg(volume=("quote_amt", "sum"), freq=("quote_amt", "count"),
+                avg_ticket=("quote_amt", "mean")).reset_index())
+    prev = (tx[(tx["tx_time"] > prev_start) & (tx["tx_time"] <= cur_start)]
+            .groupby("user_id").agg(volume_prev=("quote_amt", "sum")).reset_index())
+    users = q(con, "select user_id from staging.stg_users")
+    ltv = q(con, "select user_id, ltv_90d, revenue from marts.mart_user_360")
+    df = (users.merge(cur, on="user_id", how="left")
+               .merge(prev, on="user_id", how="left")
+               .merge(ltv, on="user_id", how="left")
+               .fillna({"volume": 0, "freq": 0, "avg_ticket": 0, "volume_prev": 0,
+                        "ltv_90d": 0, "revenue": 0}))
+    for col in ["volume", "freq", "avg_ticket"]:
+        df[col + "_rank"] = df[col].rank(pct=True)
+    df["score"] = 0.60 * df["volume_rank"] + 0.25 * df["freq_rank"] + 0.15 * df["avg_ticket_rank"]
+
+    def tierize(score):
+        qs = score.quantile([0.50, 0.80, 0.95]).values
+        return np.where(score >= qs[2], "VIP3", np.where(score >= qs[1], "VIP2",
+                         np.where(score >= qs[0], "VIP1", "VIP0")))
+
+    # Absolute volume thresholds keep tiers comparable across periods and
+    # avoid rank ties (all-zero previous volume would otherwise rank as VIP3).
+    qs = df["volume"].quantile([0.50, 0.80, 0.95]).values
+
+    def tierize_volume(v):
+        return np.where(v >= qs[2], "VIP3", np.where(v >= qs[1], "VIP2",
+                         np.where(v >= qs[0], "VIP1", "VIP0")))
+
+    df["tier"] = tierize_volume(df["volume"].to_numpy())
+    df["prev_tier"] = tierize_volume(df["volume_prev"].to_numpy())
+
+    order = {"VIP0": 0, "VIP1": 1, "VIP2": 2, "VIP3": 3}
+    cur_rank = df["tier"].map(order)
+    prev_rank = df["prev_tier"].map(order)
+    changed = cur_rank != prev_rank
+    stability = {
+        "stability_rate": round(float(1 - changed.mean()), 4),
+        "upgrades": int((cur_rank > prev_rank).sum()),
+        "downgrades": int((cur_rank < prev_rank).sum()),
+        "unchanged": int((cur_rank == prev_rank).sum()),
+        "users": int(len(df)),
+    }
+    dist = (df.groupby("tier")
+              .agg(users=("user_id", "count"), avg_90d_volume=("volume", "mean"),
+                   avg_ltv_90d=("ltv_90d", "mean"), revenue=("revenue", "sum"))
+              .reset_index())
+    dist["share"] = (dist["users"] / dist["users"].sum()).round(4)
+    benefits = pd.DataFrame([
+        {"tier": "VIP0", "rule": "score < P50", "fee_discount": "0%", "benefits": "基础费率、标准客服"},
+        {"tier": "VIP1", "rule": "P50 - P80", "fee_discount": "5%", "benefits": "费率折扣、优先客服"},
+        {"tier": "VIP2", "rule": "P80 - P95", "fee_discount": "10%", "benefits": "更高折扣、专属活动、快速提现"},
+        {"tier": "VIP3", "rule": "> P95", "fee_discount": "15%", "benefits": "专属客户经理、定制额度、线下活动"},
+    ])
+    return {"users": df[["user_id", "tier", "prev_tier", "score", "volume", "freq", "ltv_90d"]],
+            "distribution": dist, "stability": stability, "benefits": benefits}
+
+
+# ----------------------------------------------------------------
+# 6.16b Tag system coverage + persona cards
+# ----------------------------------------------------------------
+def tag_system(con) -> dict:
+    tags = q(con, "select user_id, tag, tag_type, weight from staging.stg_tags")
+    user = q(con, "select user_id, ltv_90d, is_deposited from marts.mart_user_360")
+    coverage = (tags.groupby("tag_type")
+                    .agg(tag_rows=("tag", "size"), distinct_tags=("tag", "nunique"),
+                         users=("user_id", "nunique")).reset_index())
+    coverage["avg_tags_per_user"] = (coverage["tag_rows"] / coverage["users"]).round(3)
+    top = (tags.groupby(["tag_type", "tag"]).agg(users=("user_id", "nunique"))
+               .reset_index().sort_values("users", ascending=False).head(25))
+    tm = tags.merge(user, on="user_id", how="left")
+    persona = (tm.groupby(["tag_type", "tag"])
+                 .agg(users=("user_id", "nunique"), avg_ltv_90d=("ltv_90d", "mean"),
+                      deposit_rate=("is_deposited", "mean"))
+                 .reset_index().sort_values("users", ascending=False).head(30))
+    persona[["avg_ltv_90d", "deposit_rate"]] = persona[["avg_ltv_90d", "deposit_rate"]].round(4)
+    return {"coverage": coverage, "top_tags": top, "persona_cards": persona}
+
+
+# ----------------------------------------------------------------
+# 6.17 Refined-operations matrix (segment x strategy)
+# ----------------------------------------------------------------
+def refined_ops_matrix(con) -> pd.DataFrame:
+    seg = q(con, """
+        select rfm_segment, count(*) users, avg(is_deposited) deposit_rate,
+               avg(ltv_90d) avg_ltv, sum(revenue) revenue, avg(tx_cnt) avg_tx
+        from marts.mart_user_360 where rfm_segment is not null group by 1
+    """)
+    nt = q(con, """
+        select 'never_traded' as rfm_segment, count(*) users, avg(is_deposited) deposit_rate,
+               avg(ltv_90d) avg_ltv, sum(revenue) revenue, avg(tx_cnt) avg_tx
+        from marts.mart_user_360 where rfm_segment is null
+    """)
+    df = pd.concat([seg, nt], ignore_index=True)
+    plan = {
+        "champions": ("VIP 权益 + 专属客服", "retention_rate", "服务成本/人", 0.03),
+        "loyal": ("跨品类推荐 + 手续费折扣", "ARPU", "折扣侵蚀", 0.05),
+        "promising": ("交易任务 + 品类引导", "trade_frequency", "奖励成本", 0.08),
+        "need_attention": ("限时任务 + 分层召回", "reactivation_rate", "打扰率", 0.06),
+        "at_risk": ("大额召回券 + 1v1 触达", "churn_rate", "补贴成本", 0.10),
+        "hibernating": ("低频内容种草 + 被动召回", "reactivation_rate", "退订率", 0.04),
+        "never_traded": ("新手任务 + 模拟盘", "first_trade_rate", "转化质量", 0.07),
+    }
+    rows = []
+    for _, r in df.iterrows():
+        strat, target, guard, uplift = plan.get(r["rfm_segment"], ("观察", "n/a", "n/a", 0.0))
+        priority = float(r["users"]) * float(r["avg_ltv"] or 0) * uplift
+        rows.append({"segment": r["rfm_segment"], "users": int(r["users"]),
+                     "deposit_rate": round(float(r["deposit_rate"] or 0), 4),
+                     "avg_ltv_90d": round(float(r["avg_ltv"] or 0), 4),
+                     "revenue": round(float(r["revenue"] or 0), 2),
+                     "strategy": strat, "target_metric": target,
+                     "guardrail": guard, "expected_uplift": uplift,
+                     "priority_score": round(priority, 2)})
+    return pd.DataFrame(rows).sort_values("priority_score", ascending=False)
+
+
+# ----------------------------------------------------------------
 # Orchestration
 # ----------------------------------------------------------------
 def run_all(con) -> tuple[dict, dict]:
     tasks = {
         "funnel": funnel_analysis,
+        "funnel_attr": funnel_attribution,
         "rfm": rfm_segmentation,
         "behaviour": behavioural_sequences,
+        "behaviour_validation": behavioural_validation,
         "flow": flow_paths,
         "attribution": attribution_models,
         "shapley": channel_shapley,
         "ltv": ltv_models,
+        "km": kaplan_meier,
         "survival": survival_cox,
         "roi_waterfall": roi_waterfall,
         "campaign": campaign_incremental_roi,
@@ -718,7 +1101,11 @@ def run_all(con) -> tuple[dict, dict]:
         "modules": module_efficiency,
         "cta": cta_factorial,
         "logistic": logistic_model,
+        "churn": churn_model,
         "ab": ab_test,
+        "vip": vip_mechanism,
+        "tags": tag_system,
+        "ops": refined_ops_matrix,
         "budget": budget_elasticity,
         "okr": okr_attribution,
     }

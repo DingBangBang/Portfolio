@@ -1,0 +1,9 @@
+dependent,effect,F,p_value
+Intercept,Wilks' lambda,,0.0
+Intercept,Pillai's trace,,0.0
+Intercept,Hotelling-Lawley trace,,0.0
+Intercept,Roy's greatest root,,0.0
+C(channel),Wilks' lambda,,0.933645
+C(channel),Pillai's trace,,0.933575
+C(channel),Hotelling-Lawley trace,,0.933636
+C(channel),Roy's greatest root,,0.611101

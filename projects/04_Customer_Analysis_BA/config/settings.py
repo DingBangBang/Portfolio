@@ -19,9 +19,13 @@ DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8501")
 SMTP_HOST = os.getenv("SMTP_HOST", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+# accept both SMTP_PASSWORD and SMTP_PASS (the name used in the email brief)
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD") or os.getenv("SMTP_PASS", "")
 MAIL_FROM = os.getenv("MAIL_FROM", SMTP_USER or "noreply@localhost")
 MAIL_TO = os.getenv("MAIL_TO", "dingbangchu@gmail.com")
 
+LARK_WEBHOOK = os.getenv("LARK_WEBHOOK", "")
+
 REPORTS_DIR = ROOT / "reports"
+RESULTS_DIR = REPORTS_DIR / "results"
 SCREENSHOT_PATH = REPORTS_DIR / "dashboard_screenshot.png"

@@ -7,6 +7,7 @@ import html
 import json
 import mimetypes
 import os
+import shutil
 import smtplib
 import subprocess
 import sys
@@ -14,6 +15,8 @@ from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+
+import requests
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -23,13 +26,69 @@ from config import settings  # noqa: E402
 # ----------------------------------------------------------------
 # macOS notification
 # ----------------------------------------------------------------
-def mac_notify(title: str, message: str, subtitle: str = "") -> dict:
+def mac_notify(title: str, message: str, subtitle: str = "", summary: str = "") -> dict:
+    """Prefer terminal-notifier (rich banner); fall back to osascript."""
     if sys.platform != "darwin":
         return {"ok": False, "reason": "not macOS"}
-    script = f'display notification {json.dumps(message)} with title {json.dumps(title)} subtitle {json.dumps(subtitle)}'
+    detail = f"{message} · {summary}" if summary else message
+    tn = shutil.which("terminal-notifier")
+    if tn:
+        try:
+            subprocess.run([tn, "-title", title, "-subtitle", subtitle,
+                            "-message", detail, "-sound", "Glass",
+                            "-group", "cex-analytics"],
+                           check=True, capture_output=True)
+            return {"ok": True, "channel": "terminal-notifier"}
+        except Exception:
+            pass
+    script = f'display notification {json.dumps(detail)} with title {json.dumps(title)} subtitle {json.dumps(subtitle)}'
     try:
         subprocess.run(["osascript", "-e", script], check=True, capture_output=True)
-        return {"ok": True}
+        return {"ok": True, "channel": "osascript"}
+    except Exception as exc:
+        return {"ok": False, "reason": str(exc)}
+
+
+def build_summary(run_ok: bool, kpis: dict, insights: list | None = None) -> str:
+    """One-line business summary used by every notification channel."""
+    if not run_ok:
+        return "Pipeline failed — check the error details"
+    if not kpis:
+        return "Pipeline succeeded"
+    parts = [f"{kpis.get('users', 0):,} users",
+             f"deposit {kpis.get('deposit_rate', 0):.1%}",
+             f"GMV ${kpis.get('gmv', 0)/1e6:.1f}M"]
+    if kpis.get("churn_rate") is not None:
+        parts.append(f"90d churn {kpis['churn_rate']:.1%}")
+    head = " | ".join(parts)
+    if insights:
+        alert = next((i for i in insights if i.get("status") == "alert"), None)
+        if alert:
+            head += f" | ⚠ {alert['title']}: {alert['finding']}"
+    return head
+
+
+def lark_notify(summary: str, run_ok: bool, kpis: dict | None = None,
+                insights: list | None = None, webhook: str | None = None) -> dict:
+    webhook = webhook or settings.LARK_WEBHOOK
+    if not webhook:
+        return {"ok": False, "reason": "LARK_WEBHOOK not configured"}
+    icon = "✅" if run_ok else "❌"
+    lines = [f"{icon} CEX Customer Analytics — {'SUCCESS' if run_ok else 'FAILED'}",
+             f"Summary: {summary}"]
+    if kpis:
+        lines += [f"Users: {kpis.get('users', 0):,}",
+                  f"Deposit CVR: {kpis.get('deposit_rate', 0):.1%}",
+                  f"GMV: ${kpis.get('gmv', 0):,.0f}",
+                  f"Fee revenue: ${kpis.get('revenue', 0):,.2f}",
+                  f"90d churn: {kpis.get('churn_rate', 0):.1%}"]
+    if insights:
+        lines.append("Top insights:")
+        for ins in insights[:3]:
+            lines.append(f"• {ins['title']}: {ins['finding']}")
+    try:
+        resp = requests.post(webhook, json={"msg_type": "text", "content": {"text": "\n".join(lines)}}, timeout=15)
+        return {"ok": resp.ok, "status_code": resp.status_code, "response": resp.text[:300]}
     except Exception as exc:
         return {"ok": False, "reason": str(exc)}
 
@@ -52,25 +111,60 @@ def open_browser(url: str) -> dict:
 # ----------------------------------------------------------------
 # Playwright screenshot
 # ----------------------------------------------------------------
-def capture_screenshot(url: str, out_path: Path, timeout_ms: int = 30000) -> dict:
+def capture_screenshot(url: str, out_path: Path, timeout_ms: int = 45000) -> dict:
+    """Capture the whole single-page dashboard by scroll-and-stitch.
+
+    Streamlit scrolls an inner container, so Playwright's ``full_page`` only
+    sees the viewport. We hide the sidebar, walk the main container and stitch
+    the slices into one long PNG.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         from playwright.sync_api import sync_playwright
     except Exception as exc:
         return {"ok": False, "reason": f"playwright import failed: {exc}"}
     try:
+        import io
+        from PIL import Image
+
         with sync_playwright() as p:
             try:
                 browser = p.chromium.launch(headless=True)
             except Exception:
-                # fall back to the locally installed Google Chrome
                 browser = p.chromium.launch(headless=True, channel="chrome")
-            page = browser.new_page(viewport={"width": 1440, "height": 2200})
+            page = browser.new_page(viewport={"width": 1440, "height": 2000})
             page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-            page.wait_for_timeout(2500)
-            page.screenshot(path=str(out_path), full_page=True)
+            page.wait_for_timeout(3000)
+            page.add_style_tag(content="""
+                [data-testid="stSidebar"] {display: none !important;}
+                section[data-testid=stMain] {margin-left: 0 !important; width: 100% !important;}
+            """)
+            page.wait_for_timeout(1500)
+            metrics = page.evaluate("""() => {
+                const el = document.querySelector('section[data-testid=stMain]');
+                return {h: el.scrollHeight, c: el.clientHeight};
+            }""")
+            total, client = int(metrics["h"]), int(metrics["c"])
+            if total <= client + 50:
+                page.screenshot(path=str(out_path), full_page=True)
+            else:
+                imgs = []
+                for off in range(0, total, client):
+                    page.evaluate(
+                        "(y) => { const el = document.querySelector('section[data-testid=stMain]'); el.scrollTop = y; }",
+                        off)
+                    page.wait_for_timeout(450)
+                    buf = page.screenshot(full_page=False)
+                    imgs.append(Image.open(io.BytesIO(buf)).convert("RGB"))
+                width = imgs[0].width
+                stitched = Image.new("RGB", (width, client * len(imgs)), "white")
+                for i, im in enumerate(imgs):
+                    stitched.paste(im, (0, i * client))
+                stitched = stitched.crop((0, 0, width, min(total, stitched.height)))
+                stitched.save(out_path)
             browser.close()
-        return {"ok": True, "path": str(out_path), "bytes": out_path.stat().st_size}
+        return {"ok": True, "path": str(out_path), "bytes": out_path.stat().st_size,
+                "height": int(total)}
     except Exception as exc:
         return {"ok": False, "reason": str(exc)}
 
@@ -126,9 +220,8 @@ def build_html(run_ok: bool, kpis: dict, insights: list, errors: dict,
     parts.append("</ol>")
 
     if screenshot and Path(screenshot).exists():
-        b64 = base64.b64encode(Path(screenshot).read_bytes()).decode()
         parts.append("<h2 style='font-size:17px'>Live dashboard</h2>")
-        parts.append(f"<img src='data:image/png;base64,{b64}' style='max-width:100%;border:1px solid #d0d7de;border-radius:8px'/>")
+        parts.append("<img src='cid:dashboard' style='max-width:100%;border:1px solid #d0d7de;border-radius:8px'/>")
 
     if tables:
         for title, df in tables.items():
@@ -170,14 +263,29 @@ def send_email(subject: str, html_body: str, to: str | None = None,
     msg["To"] = to
     msg.attach(MIMEText(html_body, "html", "utf-8"))
     if screenshot and Path(screenshot).exists():
-        img = MIMEImage(Path(screenshot).read_bytes(), _subtype="png")
+        try:
+            import io as _io
+            from PIL import Image
+            im = Image.open(screenshot)
+            im.thumbnail((1200, 20000))
+            buf = _io.BytesIO()
+            im.convert("RGB").save(buf, format="JPEG", quality=80, optimize=True)
+            img = MIMEImage(buf.getvalue(), _subtype="jpeg")
+        except Exception:
+            img = MIMEImage(Path(screenshot).read_bytes(), _subtype="png")
         img.add_header("Content-ID", "<dashboard>")
         msg.attach(img)
     try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
+        if settings.SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=25)
+        else:
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=25)
             server.starttls()
+        try:
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.sendmail(settings.MAIL_FROM, [to], msg.as_string())
+        finally:
+            server.quit()
         result.update({"ok": True, "reason": "sent"})
     except Exception as exc:
         result["reason"] = str(exc)

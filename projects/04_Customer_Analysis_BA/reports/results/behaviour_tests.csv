@@ -1,0 +1,5 @@
+behaviour,deposited_mean,non_deposited_mean,diff,t_stat,p_value
+deposit_start,0.08,0.0,0.08,27.065,9.197764372196201e-155
+submit_kyc,0.0636,0.0636,-0.0,-0.001,0.9990262087042938
+click_task,0.0297,0.0298,-0.0002,-0.062,0.9507201539490641
+view_tutorial,0.0244,0.0271,-0.0027,-1.191,0.23374281210411652

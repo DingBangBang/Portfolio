@@ -1,0 +1,6 @@
+step,segment,corr,n_days,best_lag_days
+1_base,all,-0.0512,240,
+2_lag_best,all,-0.1248,240,1.0
+3_partial,all,-0.0587,240,
+4_segment,brand,-0.0671,240,
+4_segment,generic,-0.0496,240,

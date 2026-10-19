@@ -1,0 +1,5 @@
+tag_type,tag_rows,distinct_tags,users,avg_tags_per_user
+fact,40000,11,20000,2.0
+model,20000,2,20000,1.0
+rule,55550,5,20000,2.778
+stat,27612,12,20000,1.381
