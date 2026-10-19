@@ -71,3 +71,16 @@
 4. 输出：图表、Excel（`formated_data_for_marketing_*.xlsx`）与分析报告 PDF。
 
 > 说明：Notebook 内的数据读取路径为本机绝对路径，复现时请改为自己的数据目录。
+
+
+## 6. 运行结果截图
+<img width="702" height="1438" alt="image" src="https://github.com/user-attachments/assets/35500d0e-5605-4790-8fb0-4225f82e24d9" />
+<img width="587" height="290" alt="image" src="https://github.com/user-attachments/assets/480131b3-8bfb-4257-87d6-d9890ee7611d" />
+<img width="665" height="962" alt="image" src="https://github.com/user-attachments/assets/1a9569d7-a8e3-4013-878a-25219602207e" />
+<img width="459" height="827" alt="image" src="https://github.com/user-attachments/assets/97a5d825-fee4-4254-a72c-a37af7c8bbd9" />
+<img width="698" height="1489" alt="image" src="https://github.com/user-attachments/assets/a42b01ab-87bd-49c1-971e-013570e9db12" />
+<img width="673" height="401" alt="image" src="https://github.com/user-attachments/assets/ddf4e4b7-66ae-4374-827a-9079d6faa009" />
+<img width="705" height="578" alt="image" src="https://github.com/user-attachments/assets/def49d27-4008-4036-8b33-344fbdd2c816" />
+<img width="658" height="561" alt="image" src="https://github.com/user-attachments/assets/efc947f4-e71c-4e7f-86a6-5313f646c4c4" />
+<img width="709" height="279" alt="image" src="https://github.com/user-attachments/assets/f4429794-cdeb-4061-9420-70cfcfb5652e" />
+<img width="714" height="174" alt="image" src="https://github.com/user-attachments/assets/39743800-43da-404c-be4d-b4719225f630" />
