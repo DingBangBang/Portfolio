@@ -688,9 +688,9 @@ fact_cta_experiments / fact_ab_assignments                —— 实验级事实
 
 > 中英双版长图由 Playwright 滚动拼接，均为 1440 × 23,150：
 
-![中文看板](./reports/dashboard_screenshot_zh.png)
+[中文看板]()
 
-![English dashboard](./reports/dashboard_screenshot_en.png)
+[English dashboard]()
 
 ### 10.2 三源通知（均附带中英双版直达链接）
 
