@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: stg_users
+    description: "Cleaned user master table."
+    columns:
+      - name: user_id
+        tests: [unique, not_null]
+      - name: register_channel
+        tests:
+          - accepted_values:
+              values: ['organic', 'referral', 'brand_search', 'google_ads', 'twitter', 'telegram', 'kol', 'affiliate']
+      - name: register_device_type
+        tests:
+          - accepted_values:
+              values: ['ios', 'android', 'web']
+
+  - name: stg_kyc
+    columns:
+      - name: kyc_id
+        tests: [unique, not_null]
+      - name: kyc_status
+        tests:
+          - accepted_values:
+              values: ['SUCCESS', 'FAIL', 'PENDING']
+
+  - name: stg_transactions
+    columns:
+      - name: tx_id
+        tests: [unique, not_null]
+      - name: user_id
+        tests:
+          - relationships:
+              to: ref('stg_users')
+              field: user_id
+      - name: record_type
+        tests:
+          - accepted_values:
+              values: ['BUY', 'SELL']
+
+  - name: stg_deposits
+    columns:
+      - name: dw_id
+        tests: [unique, not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['SUCCESS', 'FAIL', 'PENDING']
+
+  - name: stg_touchpoints
+    columns:
+      - name: tp_id
+        tests: [unique, not_null]
+
+  - name: stg_ltv
+    columns:
+      - name: user_id
+        tests: [unique, not_null]

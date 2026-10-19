@@ -1,0 +1,3 @@
+model,MAE,RMSE,Spearman,n_train,n_test,status
+LightGBM,1.7451,2.4277,0.9914,6106,1506,
+BG/NBD + Gamma-Gamma,18.1617,51.3077,0.7319,7612,7586,ok

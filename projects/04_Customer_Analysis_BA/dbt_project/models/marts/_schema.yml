@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: mart_user_360
+    description: "User-level 360 view: funnel flags, RFM, LTV, tags."
+    columns:
+      - name: user_id
+        tests: [unique, not_null]
+
+  - name: mart_funnel_daily
+    columns:
+      - name: period
+        tests: [not_null]
+      - name: step
+        tests:
+          - accepted_values:
+              values: ['visit', 'register', 'kyc', 'deposit', 'trade']
+
+  - name: mart_channel_performance
+    columns:
+      - name: channel
+        tests: [unique, not_null]
+
+  - name: mart_segment_summary
+    columns:
+      - name: rfm_segment
+        tests: [unique, not_null]

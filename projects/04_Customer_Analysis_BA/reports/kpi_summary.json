@@ -1,0 +1,19 @@
+{
+  "users": 20000,
+  "kyc_users": 14157,
+  "depositors": 8428,
+  "traders": 7612,
+  "gmv": 78755325.65,
+  "revenue": 78755.33,
+  "tx_count": 58062,
+  "kyc_rate": 0.7078,
+  "deposit_rate": 0.4214,
+  "trade_rate": 0.3806,
+  "deposit_to_trade_rate": 0.9032,
+  "arpu": 3.9378,
+  "arppu": 10.3462,
+  "aov": 1356.4005,
+  "avg_ltv_90d": 3.225,
+  "churn_rate": 0.6221,
+  "gmv_per_trader": 10346.21
+}

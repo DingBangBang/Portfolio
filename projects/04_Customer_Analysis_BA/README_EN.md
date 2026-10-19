@@ -386,3 +386,320 @@ python src/budget/simulator.py
 ---
 
 > Note: this framework also applies to any "acquire → activate → trade → retain → repurchase" business — swap `dim_users` and the fact-table definitions to reuse it.
+
+---
+
+## 12. Quick Start (step-by-step reproduction after clone)
+
+> Run everything from `projects/04_Customer_Analysis_BA/`. The environment is isolated in `customer_analysis_ba`, so the global Python is untouched.
+
+### 12.1 One-time setup
+
+```bash
+cd projects/04_Customer_Analysis_BA
+conda create -n customer_analysis_ba python=3.10 -y
+conda activate customer_analysis_ba
+pip install -r requirements.txt
+
+# macOS: if scipy fails with a dlopen / __thread_bss error:
+# pip install --force-reinstall --no-deps scipy==1.13.1
+
+# optional: LightGBM needs libomp on macOS; otherwise it falls back automatically
+# brew install libomp
+
+# optional: dashboard screenshots use Playwright + the local Chrome
+pip install playwright
+```
+
+### 12.2 Data → DuckDB → dbt
+
+```bash
+python scripts/generate_mock_data.py          # 16 tables -> data/raw/*.parquet (seed=42)
+python scripts/load_raw_to_duckdb.py          # raw schema views -> warehouse.duckdb
+
+cd dbt_project
+DUCKDB_PATH=../warehouse.duckdb dbt run  --profiles-dir .
+DUCKDB_PATH=../warehouse.duckdb dbt test --profiles-dir .
+cd ..
+```
+
+### 12.3 Full pipeline (data → dbt → modelling → reports → notifications)
+
+```bash
+python main.py                 # full run, reuses existing data
+python main.py --regenerate    # regenerate synthetic data first
+python main.py --no-email      # write a local preview instead of sending
+python main.py --skip-dbt      # reuse existing marts
+```
+
+Outputs land in `reports/` (KPIs, attribution, channels, LTV, survival, experiments, budget elasticity), plus `reports/dashboard_screenshot.png`, `reports/email_preview.html` and `reports/latest_run.json`.
+
+### 12.4 Dashboard
+
+```bash
+streamlit run dashboards/app.py
+# http://localhost:8501
+```
+
+### 12.5 Docker (dashboard + Redis)
+
+```bash
+docker compose up -d --build
+# dashboard http://localhost:8501, Redis localhost:6379
+```
+
+> The image only ships dashboard runtime dependencies (`requirements-docker.txt`); core algorithms run in the host conda env. `warehouse.duckdb` is mounted as a volume.
+
+---
+
+## 13. Implementation Layout
+
+```
+04_Customer_Analysis_BA/
+├── main.py                     # end-to-end orchestrator
+├── requirements.txt            # full dependency set
+├── requirements-docker.txt     # image dependency set
+├── docker-compose.yml          # Redis + Streamlit
+├── Dockerfile
+├── scripts/
+│   ├── generate_mock_data.py   # 16 seeded synthetic tables
+│   ├── load_raw_to_duckdb.py   # Parquet -> DuckDB raw views
+│   ├── build_data_dictionary.py
+│   └── run_daily.sh            # manually triggered daily run
+├── dbt_project/
+│   ├── models/staging/         # 16 stg_* models
+│   ├── models/intermediate/    # int_user_funnel / int_user_rfm / int_channel_performance
+│   ├── models/marts/           # 8 mart_* models
+│   ├── tests/                  # 4 singular data-quality tests
+│   └── profiles.yml            # dbt-duckdb
+├── src/
+│   ├── modeling.py             # every method in README section 6
+│   └── analysis.py             # KPIs / insights / report export
+├── dashboards/app.py           # Streamlit (marts + Redis)
+├── notifications/notifier.py   # macOS / browser / HTML email / screenshot
+├── config/settings.py
+├── docs/                       # dev log, data dictionary, scheduling
+├── data/raw/                   # generated data (gitignored)
+├── warehouse.duckdb            # local warehouse (gitignored)
+└── reports/                    # all artefacts
+```
+
+---
+
+## 14. Results & Key Insights (seed=42, 20,000 users / 240 days)
+
+> The data is **synthetic**, used to validate the methodology and engineering chain. Definitions match a real business, but the numbers are not real operating results.
+
+### 14.1 Data & warehouse
+
+| Table | Rows | Table | Rows |
+| --- | ---: | --- | ---: |
+| `dim_users` | 20,000 | `fact_campaigns` | 1,200 |
+| `dim_kyc` | 20,000 | `bridge_campaign_user` | 30,000 |
+| `fact_transactions` | 58,062 | `fact_ads_spend` | 1,920 |
+| `fact_deposit_withdraw` | 26,711 | `fact_social_metrics` | 1,200 |
+| `fact_events` | 107,730 | `fact_touchpoints` | 59,844 |
+| `fact_page_modules` | 7,200 | `fact_cta_experiments` | 20,000 |
+| `fact_ab_assignments` | 20,000 | `dim_user_tags` | 143,162 |
+| `fact_ltv_labels` | 20,000 | `fact_funnel_snapshot` | 1,200 |
+
+- `dbt run`: **27/27** models succeed; `dbt test`: **30/30** pass (uniqueness, not-null, accepted values, relationships + 4 business tests);
+- Total GMV: **$78,755,325.65**; fee revenue: **$78,755.33**.
+
+### 14.2 Core KPIs (`reports/kpi_summary.json`)
+
+| Metric | Value | Metric | Value |
+| --- | ---: | --- | ---: |
+| Registered users | 20,000 | KYC completion | 70.78% |
+| First-deposit conversion | **42.14%** | Deposit → first trade | **90.32%** |
+| Traders | 7,612 | ARPU / ARPPU | $3.94 / $10.35 |
+| Avg LTV (90d) | $3.23 | 90-day churn | **62.21%** |
+| AOV | $1,356.40 | GMV per trader | $10,346.21 |
+
+### 14.3 Funnel (last-day snapshot)
+
+| Step | Users | Step CVR |
+| --- | ---: | ---: |
+| visit | 32,199 | — |
+| register | 20,000 | 62.11% |
+| kyc | 14,152 | 70.76% |
+| deposit | 8,428 | **59.55%** |
+| trade | 7,608 | 90.27% |
+
+> **The biggest leak is KYC → first deposit: 5,724 users lost.** This is the highest-priority fix.
+
+### 14.4 RFM + dimensionality-reduction segments
+
+- K-Means selects `k=3` (silhouette **0.3746**, two PCA components explain **84.72%** of variance);
+
+| cluster | users | avg cumulative volume | avg LTV (90d) | interpretation |
+| ---: | ---: | ---: | ---: | --- |
+| 0 | 806 | $6,772.92 | $4.71 | high-value but low frequency; need frequency activation |
+| 1 | 4,294 | $6,932.41 | $5.80 | mass-market core |
+| 2 | 2,512 | $17,328.26 | $14.26 | high-value core; prioritise retention |
+
+### 14.5 Four attribution models (first / last / position / Markov)
+
+| Channel | First-touch | Last-touch | Position-based | Markov | Markov vs last |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| organic | 28.18% | 26.85% | 27.09% | 21.86% | **-18.58%** |
+| referral | 17.55% | 16.67% | 16.74% | 14.99% | -10.11% |
+| google_ads | 14.81% | 15.14% | 15.05% | 15.43% | +1.88% |
+| brand_search | 12.06% | 11.81% | 11.79% | 11.39% | -3.52% |
+| twitter | 9.58% | 10.56% | 10.32% | 11.89% | +12.64% |
+| telegram | 7.45% | 7.81% | 7.73% | 9.25% | +18.45% |
+| kol | 6.72% | 7.27% | 7.21% | 9.11% | +25.28% |
+| affiliate | 3.67% | 3.89% | 4.08% | 6.08% | **+56.24%** |
+
+- **Error definition**: standard deviation of channel shares across 5 resampled folds (`stability_std`, 0.004–0.009 → stable) plus mean absolute deviation between fold-mean and full-sample shares (`reconstruction_error`, all < 0.0002);
+- **Conclusion**: last-touch materially under-states the assist value of affiliate / kol / telegram and over-states organic / referral. Markov removal effect is the primary model; last-touch is kept as a baseline only.
+
+### 14.6 Channel quality & Shapley attribution
+
+| Channel | Shapley share | ROI | CPA | Grade | Inflation flag |
+| --- | ---: | ---: | ---: | :---: | :---: |
+| organic | 26.52% | 7.96% | $129.09 | **S** |  |
+| referral | 17.14% | 5.14% | $207.32 | **S** |  |
+| google_ads | 14.57% | 2.92% | $279.32 | A |  |
+| brand_search | 11.23% | 2.62% | $314.88 | A |  |
+| twitter | 10.12% | 1.94% | $424.66 | B | ✅ |
+| kol | 7.87% | 1.25% | $706.32 | B | ✅ |
+| telegram | 7.74% | 1.35% | $605.75 | C | ✅ |
+| affiliate | 4.81% | 0.49% | $1,679.76 | C | ✅ |
+
+> Shapley answers "how much better on average with it"; Markov answers "does it work without it". Cross-checking both points to the same high-value (organic / referral) and high-CPA (affiliate / kol / telegram) channels.
+
+### 14.7 LTV: LightGBM vs BG/NBD
+
+| Model | MAE | RMSE | Spearman | Train / test |
+| --- | ---: | ---: | ---: | ---: |
+| **LightGBM** | **1.7451** | **2.4277** | **0.9914** | 6,106 / 1,506 |
+| BG/NBD + Gamma-Gamma | 18.1617 | 51.3077 | 0.7319 | 7,612 / 7,586 |
+
+- Evaluated on an **out-of-time** split (80/20 by registration date), not a random split;
+- **Decision**: LightGBM for point predictions; BG/NBD's value is `P(alive)` and expected purchase counts — for churn detection and cold-start, not for winning an MAE contest.
+
+### 14.8 Survival analysis (Cox proportional hazards)
+
+> Event = first deposit; `hazard_ratio > 1` means faster deposit conversion than the affiliate baseline.
+
+| Covariate | Hazard ratio | p-value |
+| --- | ---: | ---: |
+| register_channel = referral | 3.133 | <0.001 |
+| register_channel = organic | 2.810 | <0.001 |
+| register_channel = brand_search | 2.739 | <0.001 |
+| register_channel = google_ads | 1.721 | <0.001 |
+| register_channel = twitter | 1.342 | <0.001 |
+| register_channel = telegram | 1.331 | <0.001 |
+| register_device_type = ios | 1.200 | <0.001 |
+| register_channel = kol | 1.098 | 0.147 (n.s.) |
+
+### 14.9 Experiments & causal inference
+
+**A/B test (sign-up CTA)**
+
+| Variant | n | Conversions | CVR |
+| --- | ---: | ---: | ---: |
+| control | 9,942 | 976 | 9.82% |
+| treat | 10,058 | 1,350 | **13.42%** |
+
+- Absolute lift **+3.61pp**, relative lift **+36.72%**, `z=7.952`, `p≈1.78e-15`, 95% CI **[+2.72pp, +4.49pp]**;
+- SRM check `p=1.0` (balanced assignment) → safe to roll out.
+
+**CTA full-factorial experiment (18 combinations)**
+
+| Factor | Best level | CVR | Worst level | CVR |
+| --- | --- | ---: | --- | ---: |
+| colour | green | **5.09%** | red | 4.24% |
+| copy | claim_bonus | **5.03%** | start_trading | 4.39% |
+| size | large | **5.14%** | small | 4.32% |
+
+- Random-forest importance: `cta_color_red` 0.174, `cta_color_green` 0.154, `cta_copy_claim_bonus` 0.134;
+- **Caveat**: high importance ≠ highest marginal CVR (trees capture interactions/imbalance); read both together.
+
+### 14.10 Quarterly budget elasticity
+
+- Method: per-channel `conversions ~ log(spend)` regression + STL decomposition (trend / seasonality / residual);
+- Current marginal conversions per dollar: affiliate **0.2386**, twitter 0.2310, telegram 0.2133, kol 0.2100, organic 0.2078, referral 0.1914, brand_search 0.1885, google_ads 0.1872;
+- **Key warning**: affiliate has the highest marginal conversion but the lowest ROI (0.49%) and highest CPA ($1,680) — cheap, low-value conversions. Never allocate budget on marginal conversion alone; pair it with LTV/ROI.
+
+### 14.11 Campaign / airdrop incremental ROI (DID)
+
+| Campaign | Participants | Incremental revenue | Incremental ROI |
+| --- | ---: | ---: | ---: |
+| google_ads_campaign_0739 | 38 | +$5,613.99 | **+5.19** |
+| google_ads_campaign_0916 | 38 | -$408.01 | -0.56 |
+| organic_campaign_0534 | 39 | -$2,858.27 | -2.58 |
+| organic_campaign_1059 | 39 | -$5,222.67 | -3.69 |
+| organic_campaign_0645 | 45 | -$19,614.27 | -13.00 |
+
+> Method: participants vs same-channel non-participants, 4 weeks before/after, difference-in-differences. Most campaigns **fail to beat the natural-growth baseline** — exactly why gross-revenue campaign reporting overstates impact.
+
+### 14.12 Key insights (data-driven)
+
+1. **Biggest leak is KYC → first deposit (5,724 users, CVR 59.55%)**: prioritise deposit bonuses, simplify the deposit flow, and retarget KYC-completed non-depositors;
+2. **90-day churn 62.21%**: build a win-back programme by RFM segment (at_risk / hibernating);
+3. **Last-touch under-states assist channels**: affiliate +56.24%, kol +25.28%, telegram +18.45% — move budget reviews to Markov/Shapley;
+4. **Inflated channels**: twitter / kol / telegram / affiliate have low Shapley share and low ROI — downgrade/cut and run anti-fraud checks;
+5. **LTV model choice**: LightGBM wins on point accuracy (MAE 1.75, Spearman 0.99); BG/NBD owns `P(alive)`;
+6. **A/B is significant**: sign-up CTA +36.72% relative, p far below 0.05;
+7. **Do not optimise marginal conversion alone**: affiliate leads marginal conversion but trails on ROI — decide on marginal return × LTV jointly.
+
+---
+
+## 15. Dev Docs & Process Log
+
+| Document | Content |
+| --- | --- |
+| [docs/development_log.md](./docs/development_log.md) | Technical decisions, bugs found & fixed (index length, missing field, scipy binary, BG/NBD convergence, degenerate Markov, etc.) |
+| [docs/data_dictionary.md](./docs/data_dictionary.md) / [EN](./docs/data_dictionary_EN.md) | Field names and types of all 16 tables, generated from the actual Parquet files |
+| [docs/scheduling.md](./docs/scheduling.md) | cron / launchd setup (kept manual by default) |
+| [reports/insights.md](./reports/insights.md) | Auto-generated insights and suggestions per run |
+| [reports/latest_run.json](./reports/latest_run.json) | Steps, errors, KPIs and notification status of the last run |
+
+### 15.1 Bug fixes (summary)
+
+1. **`ValueError: cannot add indices of unequal length`** — a length-1 `pd.Series(base)` added to an N-length timedelta; fixed by building a DatetimeIndex first;
+2. **`KeyError: event_time`** — the behavioural-sequence SQL omitted `event_time`; added it;
+3. **scipy `__thread_bss` dlopen failure** (macOS 27 / arm64) — scipy 1.15.3 wheel incompatible; downgraded to `scipy==1.13.1`;
+4. **BG/NBD did not converge** — penalizer too small; retry with 0.5 / 1.0 / 2.0;
+5. **Degenerate Markov attribution** (7 channels = 0) — the removal logic re-routed traffic instead of cutting it; now transitions into/out of the removed channel go to NULL before computing absorption;
+6. **BG/NBD CLV vs LTV unit mismatch** — Gamma-Gamma predicts spend, LTV is fee revenue; scaled by 0.1%;
+7. **LightGBM missing libomp** — `brew install libomp`; `HistGradientBoosting` kept as a no-libomp fallback.
+
+---
+
+## 16. Deliverables (actual)
+
+| Category | Artefact | Status |
+| --- | --- | :---: |
+| Environment | `customer_analysis_ba` (Python 3.10.22) | ✅ |
+| Data | `scripts/generate_mock_data.py` + 16 Parquet tables (seed=42) | ✅ |
+| Warehouse | `warehouse.duckdb` with raw/staging/intermediate/marts | ✅ |
+| dbt | 27 models + 30 tests | ✅ all pass |
+| Algorithms | `src/modeling.py` (all §6 methods incl. 4 attribution models) | ✅ |
+| Analysis | `src/analysis.py` (KPIs / insights / report export) | ✅ |
+| Orchestration | `main.py` (data → dbt → modelling → reports → notify) | ✅ |
+| Dashboard | `dashboards/app.py` (Streamlit + Redis cache) | ✅ |
+| Notifications | macOS banner / browser / HTML email / Playwright screenshot | ✅ (email needs SMTP) |
+| Reports | 15 CSV/JSON/MD artefacts + dashboard screenshot | ✅ |
+| Docs | bilingual README, dev log, bilingual data dictionary, scheduling | ✅ |
+| Docker | `Dockerfile` + `docker-compose.yml` | ✅ |
+| Scheduling | `scripts/run_daily.sh` + `docs/scheduling.md` | ✅ (manual) |
+
+---
+
+## 17. Dashboard Screenshot
+
+> Captured automatically with Playwright from the live Streamlit dashboard (1440×2200). The Chinese dashboard UI shows: KPI cards (registered users, deposit conversion, traders, fee revenue, GMV, average LTV, 90-day churn, KYC rate), the conversion funnel, and the daily funnel trend chart.
+
+![Streamlit dashboard](./reports/dashboard_screenshot.png)
+
+---
+
+## 18. Boundaries & Next Steps
+
+- Synthetic data validates the methodology and engineering chain; to plug in a real warehouse, only replace `data/raw` and the `raw` views — dbt and the algorithms stay unchanged;
+- Email requires `SMTP_HOST / SMTP_USER / SMTP_PASSWORD` in `.env`; otherwise a local `reports/email_preview.html` is written;
+- DockerHub push requires `docker login` first;
+- Optional upgrades: Prophet (instead of STL), UMAP (instead of PCA), real ad/on-chain API ingestion.

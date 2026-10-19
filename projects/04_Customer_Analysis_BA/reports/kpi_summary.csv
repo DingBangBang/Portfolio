@@ -1,0 +1,2 @@
+users,kyc_users,depositors,traders,gmv,revenue,tx_count,kyc_rate,deposit_rate,trade_rate,deposit_to_trade_rate,arpu,arppu,aov,avg_ltv_90d,churn_rate,gmv_per_trader
+20000,14157,8428,7612,78755325.65,78755.33,58062,0.7078,0.4214,0.3806,0.9032,3.9378,10.3462,1356.4005,3.225,0.6221,10346.21

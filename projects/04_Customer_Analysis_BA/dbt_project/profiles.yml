@@ -1,0 +1,9 @@
+customer_analysis:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '../warehouse.duckdb') }}"
+      threads: 4
+      extensions:
+        - parquet

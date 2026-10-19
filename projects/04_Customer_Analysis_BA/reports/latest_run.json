@@ -1,0 +1,144 @@
+{
+  "started_at": "2026-10-19T20:57:43",
+  "steps": {
+    "data": {
+      "load_raw": {
+        "cmd": "/opt/miniconda3/envs/customer_analysis_ba/bin/python scripts/load_raw_to_duckdb.py",
+        "returncode": 0,
+        "stdout": "[duckdb] warehouse.duckdb: loaded 16 raw views\n  raw.bridge_campaign_user            30,000 rows\n  raw.dim_kyc                         20,000 rows\n  raw.dim_user_tags                  143,162 rows\n  raw.dim_users                       20,000 rows\n  raw.fact_ab_assignments             20,000 rows\n  raw.fact_ads_spend                   1,920 rows\n  raw.fact_campaigns                   1,200 rows\n  raw.fact_cta_experiments            20,000 rows\n  raw.fact_deposit_withdraw           26,711 rows\n  raw.fact_events                    107,730 rows\n  raw.fact_funnel_snapshot             1,200 rows\n  raw.fact_ltv_labels                 20,000 rows\n  raw.fact_page_modules                7,200 rows\n  raw.fact_social_metrics              1,200 rows\n  raw.fact_touchpoints                59,571 rows\n  raw.fact_transactions               58,062 rows\n",
+        "stderr": "",
+        "seconds": 0.08
+      }
+    },
+    "dbt": {
+      "dbt_run": {
+        "cmd": "/opt/miniconda3/envs/customer_analysis_ba/bin/dbt run --profiles-dir . --project-dir .",
+        "returncode": 0,
+        "stdout": "sql view model staging.stg_kyc .............................. [\u001b[32mOK\u001b[0m in 0.03s]\n\u001b[0m12:57:44  11 of 27 OK created sql view model staging.stg_page_modules .................... [\u001b[32mOK\u001b[0m in 0.03s]\n\u001b[0m12:57:44  10 of 27 OK created sql view model staging.stg_ltv ............................. [\u001b[32mOK\u001b[0m in 0.04s]\n\u001b[0m12:57:44  12 of 27 OK created sql view model staging.stg_social .......................... [\u001b[32mOK\u001b[0m in 0.04s]\n\u001b[0m12:57:44  13 of 27 START sql view model staging.stg_tags ................................. [RUN]\n\u001b[0m12:57:44  14 of 27 START sql view model staging.stg_touchpoints .......................... [RUN]\n\u001b[0m12:57:44  15 of 27 START sql view model staging.stg_transactions ......................... [RUN]\n\u001b[0m12:57:44  16 of 27 START sql view model staging.stg_users ................................ [RUN]\n\u001b[0m12:57:44  13 of 27 OK created sql view model staging.stg_tags ............................ [\u001b[32mOK\u001b[0m in 0.04s]\n\u001b[0m12:57:44  14 of 27 OK created sql view model staging.stg_touchpoints ..................... [\u001b[32mOK\u001b[0m in 0.03s]\n\u001b[0m12:57:44  16 of 27 OK created sql view model staging.stg_users ........................... [\u001b[32mOK\u001b[0m in 0.04s]\n\u001b[0m12:57:44  15 of 27 OK created sql view model staging.stg_transactions .................... [\u001b[32mOK\u001b[0m in 0.04s]\n\u001b[0m12:57:44  17 of 27 START sql table model marts.mart_budget_elasticity .................... [RUN]\n\u001b[0m12:57:44  18 of 27 START sql table model marts.mart_experiment_results ................... [RUN]\n\u001b[0m12:57:44  19 of 27 START sql table model marts.mart_funnel_daily ......................... [RUN]\n\u001b[0m12:57:44  20 of 27 START sql table model marts.mart_module_efficiency .................... [RUN]\n\u001b[0m12:57:45  19 of 27 OK created sql table model marts.mart_funnel_daily .................... [\u001b[32mOK\u001b[0m in 0.09s]\n\u001b[0m12:57:45  17 of 27 OK created sql table model marts.mart_budget_elasticity ............... [\u001b[32mOK\u001b[0m in 0.09s]\n\u001b[0m12:57:45  20 of 27 OK created sql table model marts.mart_module_efficiency ............... [\u001b[32mOK\u001b[0m in 0.09s]\n\u001b[0m12:57:45  21 of 27 START sql view model intermediate.int_user_funnel ..................... [RUN]\n\u001b[0m12:57:45  18 of 27 OK created sql table model marts.mart_experiment_results .............. [\u001b[32mOK\u001b[0m in 0.09s]\n\u001b[0m12:57:45  22 of 27 START sql view model intermediate.int_user_rfm ........................ [RUN]\n\u001b[0m12:57:45  21 of 27 OK created sql view model intermediate.int_user_funnel ................ [\u001b[32mOK\u001b[0m in 0.02s]\n\u001b[0m12:57:45  22 of 27 OK created sql view model intermediate.int_user_rfm ................... [\u001b[32mOK\u001b[0m in 0.02s]\n\u001b[0m12:57:45  23 of 27 START sql view model intermediate.int_channel_performance ............. [RUN]\n\u001b[0m12:57:45  24 of 27 START sql table model marts.mart_user_360 ............................. [RUN]\n\u001b[0m12:57:47  24 of 27 OK created sql table model marts.mart_user_360 ........................ [\u001b[32mOK\u001b[0m in 0.06s]\n\u001b[0m12:57:47  23 of 27 OK created sql view model intermediate.int_channel_performance ........ [\u001b[32mOK\u001b[0m in 0.02s]\n\u001b[0m12:57:47  25 of 27 START sql table model marts.mart_campaign_roi ......................... [RUN]\n\u001b[0m12:57:47  26 of 27 START sql table model marts.mart_segment_summary ...................... [RUN]\n\u001b[0m12:57:47  27 of 27 START sql table model marts.mart_channel_performance .................. [RUN]\n\u001b[0m12:57:47  26 of 27 OK created sql table model marts.mart_segment_summary ................. [\u001b[32mOK\u001b[0m in 0.04s]\n\u001b[0m12:57:47  25 of 27 OK created sql table model marts.mart_campaign_roi .................... [\u001b[32mOK\u001b[0m in 0.05s]\n\u001b[0m12:57:47  27 of 27 OK created sql table model marts.mart_channel_performance ............. [\u001b[32mOK\u001b[0m in 0.05s]\n\u001b[0m12:57:47  \n\u001b[0m12:57:47  Finished running 8 table models, 19 view models in 0 hours 0 minutes and 2.97 seconds (2.97s).\n\u001b[0m12:57:47  \n\u001b[0m12:57:47  \u001b[32mCompleted successfully\u001b[0m\n\u001b[0m12:57:47  \n\u001b[0m12:57:47  Done. PASS=27 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=27\n",
+        "stderr": "",
+        "seconds": 6.9
+      },
+      "dbt_test": {
+        "cmd": "/opt/miniconda3/envs/customer_analysis_ba/bin/dbt test --profiles-dir . --project-dir .",
+        "returncode": 0,
+        "stdout": "ull_stg_deposits_dw_id ................................ [RUN]\n\u001b[0m12:57:51  16 of 30 START test not_null_stg_kyc_kyc_id .................................... [RUN]\n\u001b[0m12:57:51  13 of 30 PASS not_null_mart_segment_summary_rfm_segment ........................ [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  14 of 30 PASS not_null_mart_user_360_user_id ................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  15 of 30 PASS not_null_stg_deposits_dw_id ...................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  16 of 30 PASS not_null_stg_kyc_kyc_id .......................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  17 of 30 START test not_null_stg_ltv_user_id ................................... [RUN]\n\u001b[0m12:57:51  18 of 30 START test not_null_stg_touchpoints_tp_id ............................. [RUN]\n\u001b[0m12:57:51  19 of 30 START test not_null_stg_transactions_tx_id ............................ [RUN]\n\u001b[0m12:57:51  20 of 30 START test not_null_stg_users_user_id ................................. [RUN]\n\u001b[0m12:57:51  18 of 30 PASS not_null_stg_touchpoints_tp_id ................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  17 of 30 PASS not_null_stg_ltv_user_id ......................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  19 of 30 PASS not_null_stg_transactions_tx_id .................................. [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  20 of 30 PASS not_null_stg_users_user_id ....................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  21 of 30 START test relationships_stg_transactions_user_id__user_id__ref_stg_users_  [RUN]\n\u001b[0m12:57:51  22 of 30 START test unique_mart_channel_performance_channel .................... [RUN]\n\u001b[0m12:57:51  23 of 30 START test unique_mart_segment_summary_rfm_segment .................... [RUN]\n\u001b[0m12:57:51  24 of 30 START test unique_mart_user_360_user_id ............................... [RUN]\n\u001b[0m12:57:51  22 of 30 PASS unique_mart_channel_performance_channel .......................... [\u001b[32mPASS\u001b[0m in 0.03s]\n\u001b[0m12:57:51  24 of 30 PASS unique_mart_user_360_user_id ..................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  25 of 30 START test unique_stg_deposits_dw_id .................................. [RUN]\n\u001b[0m12:57:51  23 of 30 PASS unique_mart_segment_summary_rfm_segment .......................... [\u001b[32mPASS\u001b[0m in 0.03s]\n\u001b[0m12:57:51  26 of 30 START test unique_stg_kyc_kyc_id ...................................... [RUN]\n\u001b[0m12:57:51  21 of 30 PASS relationships_stg_transactions_user_id__user_id__ref_stg_users_ .. [\u001b[32mPASS\u001b[0m in 0.04s]\n\u001b[0m12:57:51  27 of 30 START test unique_stg_ltv_user_id ..................................... [RUN]\n\u001b[0m12:57:51  28 of 30 START test unique_stg_touchpoints_tp_id ............................... [RUN]\n\u001b[0m12:57:51  25 of 30 PASS unique_stg_deposits_dw_id ........................................ [\u001b[32mPASS\u001b[0m in 0.03s]\n\u001b[0m12:57:51  26 of 30 PASS unique_stg_kyc_kyc_id ............................................ [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  27 of 30 PASS unique_stg_ltv_user_id ........................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  29 of 30 START test unique_stg_transactions_tx_id .............................. [RUN]\n\u001b[0m12:57:51  30 of 30 START test unique_stg_users_user_id ................................... [RUN]\n\u001b[0m12:57:51  28 of 30 PASS unique_stg_touchpoints_tp_id ..................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  30 of 30 PASS unique_stg_users_user_id ......................................... [\u001b[32mPASS\u001b[0m in 0.01s]\n\u001b[0m12:57:51  29 of 30 PASS unique_stg_transactions_tx_id .................................... [\u001b[32mPASS\u001b[0m in 0.02s]\n\u001b[0m12:57:51  \n\u001b[0m12:57:51  Finished running 30 data tests in 0 hours 0 minutes and 0.34 seconds (0.34s).\n\u001b[0m12:57:51  \n\u001b[0m12:57:51  \u001b[32mCompleted successfully\u001b[0m\n\u001b[0m12:57:51  \n\u001b[0m12:57:51  Done. PASS=30 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=30\n",
+        "stderr": "",
+        "seconds": 3.81
+      }
+    },
+    "reports": {
+      "report_dir": "/Users/dingbangchu/.cline/worktrees/93aa2/Portfolio/projects/04_Customer_Analysis_BA/reports",
+      "files": [
+        "attribution_comparison.csv",
+        "budget_elasticity.csv",
+        "campaign_incremental_roi.csv",
+        "channel_shapley.csv",
+        "cox_hazard_ratios.csv",
+        "cta_feature_importance.csv",
+        "funnel_by_channel.csv",
+        "funnel_by_device.csv",
+        "insights.md",
+        "kpi_summary.csv",
+        "kpi_summary.json",
+        "ltv_metrics.csv",
+        "module_efficiency.csv",
+        "okr_attribution.csv",
+        "rfm_personas.csv"
+      ]
+    },
+    "dashboard": {
+      "healthy": true,
+      "url": "http://localhost:8501"
+    },
+    "screenshot": {
+      "ok": true,
+      "path": "/Users/dingbangchu/.cline/worktrees/93aa2/Portfolio/projects/04_Customer_Analysis_BA/reports/dashboard_screenshot.png",
+      "bytes": 140776
+    },
+    "mac_notify": {
+      "ok": true
+    },
+    "browser": {
+      "ok": true,
+      "url": "http://localhost:8501"
+    },
+    "email": {
+      "ok": false,
+      "preview": "/Users/dingbangchu/.cline/worktrees/93aa2/Portfolio/projects/04_Customer_Analysis_BA/reports/email_preview.html",
+      "to": "dingbangchu@gmail.com",
+      "reason": "SMTP not configured; wrote local preview only"
+    }
+  },
+  "errors": {},
+  "finished_at": "2026-10-19T20:58:17",
+  "ok": true,
+  "kpis": {
+    "users": 20000,
+    "kyc_users": 14157,
+    "depositors": 8428,
+    "traders": 7612,
+    "gmv": 78755325.65,
+    "revenue": 78755.33,
+    "tx_count": 58062,
+    "kyc_rate": 0.7078,
+    "deposit_rate": 0.4214,
+    "trade_rate": 0.3806,
+    "deposit_to_trade_rate": 0.9032,
+    "arpu": 3.9378,
+    "arppu": 10.3462,
+    "aov": 1356.4005,
+    "avg_ltv_90d": 3.225,
+    "churn_rate": 0.6221,
+    "gmv_per_trader": 10346.21
+  },
+  "insights": [
+    {
+      "title": "注册→首次入金转化率",
+      "finding": "当前 42.14%",
+      "status": "ok",
+      "suggestion": "处于健康区间，保持监控"
+    },
+    {
+      "title": "入金→首笔交易转化率",
+      "finding": "当前 90.32%",
+      "status": "ok",
+      "suggestion": "处于健康区间，保持监控"
+    },
+    {
+      "title": "90 天流失率",
+      "finding": "当前 62.21%",
+      "status": "alert",
+      "suggestion": "高于阈值，建议对沉默用户启动召回"
+    },
+    {
+      "title": "漏斗最大漏损",
+      "finding": "KYC→首次入金流失 5,724 人",
+      "status": "alert",
+      "suggestion": "对已 KYC 未入金人群推送首充奖励 + 简化入金流程"
+    },
+    {
+      "title": "被末次点击低估的渠道",
+      "finding": "affiliate 的马尔可夫贡献比末次点击高 2.2 个百分点",
+      "status": "info",
+      "suggestion": "预算评审改用马尔可夫/Shapley，避免只奖励最后一跳"
+    },
+    {
+      "title": "A/B 实验结果",
+      "finding": "实验组提升 36.72%，p=0.0000",
+      "status": "ok",
+      "suggestion": "显著则全量，不显著则继续扩大样本或改版"
+    },
+    {
+      "title": "预算边际回报最高的渠道",
+      "finding": "affiliate（每美元边际转化 0.238607）",
+      "status": "info",
+      "suggestion": "在弹性曲线拐点前优先加投该渠道，并设置边际回报下限"
+    },
+    {
+      "title": "LTV 模型选型",
+      "finding": "LightGBM: Spearman=0.9914；BG/NBD + Gamma-Gamma: Spearman=0.7319",
+      "status": "info",
+      "suggestion": "以机器学习为主预测器，BG/NBD 的 P(alive) 作为流失判定特征"
+    }
+  ]
+}

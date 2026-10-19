@@ -386,3 +386,324 @@ python src/budget/simulator.py
 ---
 
 > 备注：本项目的分析框架同样适用于其它「拉新 → 激活 → 交易 → 留存 → 复购」型业务，替换 `dim_users` 与事实表口径即可复用。
+
+---
+
+## 12. 快速开始（Clone 后逐步复现）
+
+> 以下命令全部在 `projects/04_Customer_Analysis_BA/` 目录下执行；环境已隔离为 `customer_analysis_ba`，不会污染全局 Python。
+
+### 12.1 一次性环境准备
+
+```bash
+cd projects/04_Customer_Analysis_BA
+conda create -n customer_analysis_ba python=3.10 -y
+conda activate customer_analysis_ba
+pip install -r requirements.txt
+
+# macOS 若出现 scipy dlopen 报错（__thread_bss），降级到兼容版本：
+# pip install --force-reinstall --no-deps scipy==1.13.1
+
+# 可选：LightGBM 在 macOS 需要 libomp；没有则自动回退到 HistGradientBoosting
+# brew install libomp
+
+# 可选：看板截图用 Playwright + 本机 Chrome
+pip install playwright   # 已安装 Chrome 时无需再下载 chromium
+```
+
+### 12.2 生成数据 → 装载 DuckDB → dbt
+
+```bash
+python scripts/generate_mock_data.py          # 16 张表 → data/raw/*.parquet（seed=42）
+python scripts/load_raw_to_duckdb.py          # 建 raw schema 视图 → warehouse.duckdb
+
+cd dbt_project
+DUCKDB_PATH=../warehouse.duckdb dbt run  --profiles-dir .
+DUCKDB_PATH=../warehouse.duckdb dbt test --profiles-dir .
+cd ..
+```
+
+### 12.3 一键跑完整流水线（数据 → dbt → 建模 → 报表 → 通知）
+
+```bash
+python main.py                 # 完整运行（复用已有数据）
+python main.py --regenerate    # 重新生成数据
+python main.py --no-email      # 不发邮件，只写本地预览
+python main.py --skip-dbt      # 复用已构建的 marts
+```
+
+产出：`reports/`（KPI、归因、渠道、LTV、生存分析、实验、预算弹性、data dictionary 链接）、`reports/dashboard_screenshot.png`、`reports/email_preview.html`、`reports/latest_run.json`。
+
+### 12.4 启动看板
+
+```bash
+streamlit run dashboards/app.py
+# http://localhost:8501
+```
+
+### 12.5 Docker 一键启动（看板 + Redis）
+
+```bash
+docker compose up -d --build
+# 看板 http://localhost:8501 ，Redis localhost:6379
+```
+
+> 注意：Docker 镜像只包含看板运行依赖（见 `requirements-docker.txt`），核心算法仍在宿主机 conda 环境运行；`warehouse.duckdb` 通过 volume 挂载。
+
+---
+
+## 13. 工程实现（真实目录）
+
+```
+04_Customer_Analysis_BA/
+├── main.py                     # 端到端编排器
+├── requirements.txt            # 全量依赖
+├── requirements-docker.txt     # 镜像依赖
+├── docker-compose.yml          # Redis + Streamlit
+├── Dockerfile                  # 看板镜像
+├── scripts/
+│   ├── generate_mock_data.py   # 16 张表合成（固定 seed）
+│   ├── load_raw_to_duckdb.py   # Parquet → DuckDB raw 视图
+│   ├── build_data_dictionary.py
+│   └── run_daily.sh            # 手动触发的日更脚本
+├── dbt_project/
+│   ├── models/staging/         # 16 个 stg_* 模型
+│   ├── models/intermediate/    # int_user_funnel / int_user_rfm / int_channel_performance
+│   ├── models/marts/           # 8 个 mart_* 模型
+│   ├── tests/                  # 4 个数据质量单测
+│   └── profiles.yml            # dbt-duckdb
+├── src/
+│   ├── modeling.py             # README 第 6 节全部算法
+│   └── analysis.py             # KPI / insights / 报表导出
+├── dashboards/app.py           # Streamlit（Mart + Redis）
+├── notifications/notifier.py   # macOS 通知 / 浏览器 / HTML 邮件 / 截图
+├── config/settings.py
+├── docs/
+│   ├── development_log.md      # 开发过程记录
+│   ├── data_dictionary.md / _EN.md
+│   └── scheduling.md           # cron / launchd（默认手动触发）
+├── data/raw/                   # 生成数据（gitignore）
+├── warehouse.duckdb            # 本地数仓（gitignore）
+└── reports/                    # 所有产物
+```
+
+---
+
+## 14. 运行结果与核心 Insights（seed=42，20,000 用户 / 240 天）
+
+> 数据为**合成数据**，用于验证方法与工程链路；结论口径与真实业务一致，但数值不代表真实经营结果。
+
+### 14.1 数据与数仓
+
+| 表 | 行数 | 表 | 行数 |
+| --- | ---: | --- | ---: |
+| `dim_users` | 20,000 | `fact_campaigns` | 1,200 |
+| `dim_kyc` | 20,000 | `bridge_campaign_user` | 30,000 |
+| `fact_transactions` | 58,062 | `fact_ads_spend` | 1,920 |
+| `fact_deposit_withdraw` | 26,711 | `fact_social_metrics` | 1,200 |
+| `fact_events` | 107,730 | `fact_touchpoints` | 59,844 |
+| `fact_page_modules` | 7,200 | `fact_cta_experiments` | 20,000 |
+| `fact_ab_assignments` | 20,000 | `dim_user_tags` | 143,162 |
+| `fact_ltv_labels` | 20,000 | `fact_funnel_snapshot` | 1,200 |
+
+- `dbt run`：**27/27** 模型成功；`dbt test`：**30/30** 通过（唯一性、非空、枚举、外键 + 4 个业务单测）；
+- 全量 GMV：**$78,755,325.65**；手续费收入：**$78,755.33**。
+
+### 14.2 核心 KPI（自动写入 `reports/kpi_summary.json`）
+
+| 指标 | 数值 | 指标 | 数值 |
+| --- | ---: | --- | ---: |
+| 注册用户 | 20,000 | KYC 完成率 | 70.78% |
+| 首次入金转化率 | **42.14%** | 入金→首笔交易 | **90.32%** |
+| 交易用户 | 7,612 | ARPU / ARPPU | $3.94 / $10.35 |
+| 平均 LTV(90d) | $3.23 | 90 天流失率 | **62.21%** |
+| AOV | $1,356.40 | 人均 GMV（交易用户） | $10,346.21 |
+
+### 14.3 转化漏斗（最后一天快照）
+
+| 步骤 | 人数 | 相对上一步 CVR |
+| --- | ---: | ---: |
+| visit | 32,199 | — |
+| register | 20,000 | 62.11% |
+| kyc | 14,152 | 70.76% |
+| deposit | 8,428 | **59.55%** |
+| trade | 7,608 | 90.27% |
+
+> **最大漏损在 KYC → 首次入金**：流失 **5,724 人**。这是最值得优先优化的环节。
+
+### 14.4 RFM + 降维分群
+
+- K-Means 自动选 `k=3`（轮廓系数 **0.3746**，PCA 两维解释 **84.72%** 方差）；
+- 三个行为分群：
+
+| cluster | 用户数 | 平均累计交易额 | 平均 LTV(90d) | 解读 |
+| ---: | ---: | ---: | ---: | --- |
+| 0 | 806 | $6,772.92 | $4.71 | 低频高额，需激活频次 |
+| 1 | 4,294 | $6,932.41 | $5.80 | 主力大众人群 |
+| 2 | 2,512 | $17,328.26 | $14.26 | 高价值核心人群，重点维护 |
+
+### 14.5 四归因模型对比（首次 / 末次 / 位置 / 马尔可夫）
+
+| 渠道 | 首次归因 | 末次归因 | 位置归因 | 马尔可夫 | 马尔可夫 vs 末次 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| organic | 28.18% | 26.85% | 27.09% | 21.86% | **-18.58%** |
+| referral | 17.55% | 16.67% | 16.74% | 14.99% | -10.11% |
+| google_ads | 14.81% | 15.14% | 15.05% | 15.43% | +1.88% |
+| brand_search | 12.06% | 11.81% | 11.79% | 11.39% | -3.52% |
+| twitter | 9.58% | 10.56% | 10.32% | 11.89% | +12.64% |
+| telegram | 7.45% | 7.81% | 7.73% | 9.25% | +18.45% |
+| kol | 6.72% | 7.27% | 7.21% | 9.11% | +25.28% |
+| affiliate | 3.67% | 3.89% | 4.08% | 6.08% | **+56.24%** |
+
+- **误差定义**：5 折重采样的渠道份额标准差（`stability_std`，均在 0.004~0.009，稳定）+ 折均值与全量份额的平均绝对偏差（`reconstruction_error`，均 < 0.0002）；
+- **结论**：末次点击显著低估 affiliate / kol / telegram 的“助攻价值”，同时高估 organic / referral；因此主归因采用**马尔可夫移除效应**，末次点击只作为对照基线。
+
+### 14.6 渠道质量分级与 Shapley 归因
+
+| 渠道 | Shapley 份额 | ROI | CPA | 分级 | 注水标记 |
+| --- | ---: | ---: | ---: | :---: | :---: |
+| organic | 26.52% | 7.96% | $129.09 | **S** |  |
+| referral | 17.14% | 5.14% | $207.32 | **S** |  |
+| google_ads | 14.57% | 2.92% | $279.32 | A |  |
+| brand_search | 11.23% | 2.62% | $314.88 | A |  |
+| twitter | 10.12% | 1.94% | $424.66 | B | ✅ |
+| kol | 7.87% | 1.25% | $706.32 | B | ✅ |
+| telegram | 7.74% | 1.35% | $605.75 | C | ✅ |
+| affiliate | 4.81% | 0.49% | $1,679.76 | C | ✅ |
+
+> Shapley 回答「有了它平均好多少」，马尔可夫回答「没有它行不行」；这里两者交叉验证，指向同一批高价值渠道（organic / referral）与高 CPA 渠道（affiliate / kol / telegram）。
+
+### 14.7 LTV 预测：LightGBM vs BG/NBD
+
+| 模型 | MAE | RMSE | Spearman | 训练 / 测试 |
+| --- | ---: | ---: | ---: | ---: |
+| **LightGBM** | **1.7451** | **2.4277** | **0.9914** | 6,106 / 1,506 |
+| BG/NBD + Gamma-Gamma | 18.1617 | 51.3077 | 0.7319 | 7,612 / 7,586 |
+
+- 采用**时间外样本**切分（按注册日期 80/20），不是随机切分；
+- **技术结论**：点预测用 LightGBM；BG/NBD 的价值在 `P(alive)` 与「期望购买次数」，用于流失判定与冷启动兜底，而不是直接拼 MAE。
+
+### 14.8 生存分析（Cox 比例风险）
+
+> 事件 = 首次入金；`hazard_ratio > 1` 表示相对基准渠道（affiliate）更快完成入金。
+
+| 协变量 | Hazard Ratio | p 值 |
+| --- | ---: | ---: |
+| register_channel = referral | 3.133 | <0.001 |
+| register_channel = organic | 2.810 | <0.001 |
+| register_channel = brand_search | 2.739 | <0.001 |
+| register_channel = google_ads | 1.721 | <0.001 |
+| register_channel = twitter | 1.342 | <0.001 |
+| register_channel = telegram | 1.331 | <0.001 |
+| register_device_type = ios | 1.200 | <0.001 |
+| register_channel = kol | 1.098 | 0.147（不显著） |
+
+### 14.9 实验与因果
+
+**A/B 测试（注册 CTA）**
+
+| 变体 | 样本 | 转化 | CVR |
+| --- | ---: | ---: | ---: |
+| control | 9,942 | 976 | 9.82% |
+| treat | 10,058 | 1,350 | **13.42%** |
+
+- 绝对提升 **+3.61pp**，相对提升 **+36.72%**，`z=7.952`，`p≈1.78e-15`，95% CI **[+2.72pp, +4.49pp]**；
+- SRM 检查 `p=1.0`（分流均衡），可全量。
+
+**CTA 全因子实验（18 个组合）**
+
+| 因子 | 最优水平 | CVR | 最差水平 | CVR |
+| --- | --- | ---: | --- | ---: |
+| 颜色 | green | **5.09%** | red | 4.24% |
+| 文案 | claim_bonus | **5.03%** | start_trading | 4.39% |
+| 尺寸 | large | **5.14%** | small | 4.32% |
+
+- 随机森林重要性排序：`cta_color_red` 0.174、`cta_color_green` 0.154、`cta_copy_claim_bonus` 0.134；
+- **注意**：重要性高 ≠ 边际 CVR 高（树模型会捕捉交互与不平衡），两者需结合看。
+
+### 14.10 季度预算弹性
+
+- 方法：`conversions ~ log(spend)` 分渠道回归 + STL 分解（趋势/季节/残差）；
+- 当前每日边际转化/美元：affiliate **0.2386**、twitter 0.2310、telegram 0.2133、kol 0.2100、organic 0.2078、referral 0.1914、brand_search 0.1885、google_ads 0.1872；
+- **关键提醒**：affiliate 边际转化最高，但 ROI 最低（0.49%）、CPA 最高（$1,680）——说明它带来的是“便宜但低价值”的转化，**不能只用边际转化做预算决策**，必须结合 LTV/ROI。
+
+### 14.11 活动 / 空投增量 ROI（DID）
+
+| 活动 | 参与人数 | 增量收入 | 增量 ROI |
+| --- | ---: | ---: | ---: |
+| google_ads_campaign_0739 | 38 | +$5,613.99 | **+5.19** |
+| google_ads_campaign_0916 | 38 | -$408.01 | -0.56 |
+| organic_campaign_0534 | 39 | -$2,858.27 | -2.58 |
+| organic_campaign_1059 | 39 | -$5,222.67 | -3.69 |
+| organic_campaign_0645 | 45 | -$19,614.27 | -13.00 |
+
+> 方法：参与者 vs 同渠道非参与者，比较活动前/后 4 周人均交易额，做双重差分（DID）；结果表明多数活动**没有跑赢自然增长基线**，只有少数渠道活动有正增量——这正是“看总收益会高估活动效果”的例证。
+
+### 14.12 核心洞察汇总（data-driven）
+
+1. **最大漏损在 KYC → 首次入金（流失 5,724 人，CVR 59.55%）**：优先做首充奖励、简化入金流程、对已 KYC 未入金人群定向触达；
+2. **90 天流失率 62.21%**：需要建立沉默用户召回机制（按 RFM 的 at_risk / hibernating 分层）；
+3. **末次点击低估助攻渠道**：affiliate +56.24%、kol +25.28%、telegram +18.45%，预算评审应改用马尔可夫/Shapley；
+4. **渠道注水**：twitter / kol / telegram / affiliate 的 Shapley 份额与 ROI 双低，建议降级/削减并做反作弊核验；
+5. **LTV 选型**：LightGBM 点预测最优（MAE 1.75、Spearman 0.99），BG/NBD 负责 `P(alive)`；
+6. **A/B 可全量**：注册 CTA 实验相对提升 36.72%，p 值远小于 0.05；
+7. **预算不能唯边际转化**：affiliate 边际转化最高但 ROI 最低，应按「边际回报 × LTV」联合决策。
+
+---
+
+## 15. 开发文档与过程记录
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/development_log.md](./docs/development_log.md) | 技术决策、Bug 发现与修复（索引长度、缺失字段、scipy 二进制、BG/NBD 收敛、Markov 退化等） |
+| [docs/data_dictionary.md](./docs/data_dictionary.md) / [EN](./docs/data_dictionary_EN.md) | 16 张表的字段与类型（从实际 Parquet 自动生成） |
+| [docs/scheduling.md](./docs/scheduling.md) | cron / launchd 配置（默认保持手动触发） |
+| [reports/insights.md](./reports/insights.md) | 每次运行自动生成的洞察与建议 |
+| [reports/latest_run.json](./reports/latest_run.json) | 最近一次运行的步骤、错误、KPI、通知状态 |
+
+### 15.1 关键 Bug 与修复（摘要）
+
+1. **`ValueError: cannot add indices of unequal length`**：`pd.Series(base)` 长度为 1，与 N 长度 timedelta 相加失败 → 改为先生成 DatetimeIndex 再包 Series；
+2. **`KeyError: event_time`**：行为序列 SQL 漏选 `event_time` → 补字段；
+3. **scipy `__thread_bss` dlopen 失败**（macOS 27 / arm64）：scipy 1.15.3 wheel 不兼容 → 降级 `scipy==1.13.1`；
+4. **BG/NBD 不收敛**：penalizer 过小 → 改为 0.5/1.0/2.0 自动重试；
+5. **马尔可夫归因退化**（七成渠道为 0）：原实现把流量“改道”而非“切断” → 改为删除渠道后将其流入/流出全部导向 NULL，再算吸收概率；
+6. **BG/NBD 的 CLV 与 LTV 口径不一致**：Gamma-Gamma 输出的是交易额，而 LTV 定义是手续费 → 乘 0.1% 费率后再比较；
+7. **LightGBM 缺 libomp**：`brew install libomp` 后恢复；同时保留 `HistGradientBoosting` 作为无 libomp 的兜底。
+
+---
+
+## 16. 交付物清单（实际产出）
+
+| 类别 | 产物 | 状态 |
+| --- | --- | :---: |
+| 环境 | `customer_analysis_ba`（Python 3.10.22） | ✅ |
+| 数据 | `scripts/generate_mock_data.py` + 16 张 Parquet（seed=42） | ✅ |
+| 数仓 | `warehouse.duckdb` + raw/staging/intermediate/marts | ✅ |
+| dbt | 27 个模型 + 30 个测试 | ✅ 全部通过 |
+| 算法 | `src/modeling.py`（§6 全部方法，含 4 归因模型） | ✅ |
+| 分析 | `src/analysis.py`（KPI / insights / 报表导出） | ✅ |
+| 编排 | `main.py`（数据→dbt→建模→报表→通知） | ✅ |
+| 看板 | `dashboards/app.py`（Streamlit + Redis 缓存） | ✅ |
+| 通知 | macOS 通知 / 浏览器 / HTML 邮件 / Playwright 截图 | ✅（邮件待配 SMTP） |
+| 报表 | `reports/` 15 个 CSV/JSON/MD + 看板截图 | ✅ |
+| 文档 | README 中英、开发日志、数据字典中英、定时任务说明 | ✅ |
+| Docker | `Dockerfile` + `docker-compose.yml` | ✅ |
+| 调度 | `scripts/run_daily.sh` + `docs/scheduling.md` | ✅（手动触发） |
+
+---
+
+## 17. 看板截图
+
+> 由 Playwright 自动截取本次运行成功的 Streamlit 实时看板（1440×2200）：
+
+![Streamlit dashboard](./reports/dashboard_screenshot.png)
+
+---
+
+## 18. 已知边界与后续计划
+
+- 数据为合成数据，结论用于验证方法与工程链路；接真实数仓时只需替换 `data/raw` 与 `raw` 层视图，dbt 与算法无需改动；
+- 邮件发送需配置 `.env` 中的 `SMTP_HOST / SMTP_USER / SMTP_PASSWORD`；未配置时自动写 `reports/email_preview.html`；
+- DockerHub 推送需先 `docker login`；
+- 可选升级：Prophet（替代 STL）、UMAP（替代 PCA）、真实广告/链上 API 抓取。

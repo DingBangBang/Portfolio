@@ -1,0 +1,23 @@
+name: 'customer_analysis'
+version: '1.0.0'
+config-version: 2
+
+profile: 'customer_analysis'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  customer_analysis:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: marts

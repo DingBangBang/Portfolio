@@ -1,0 +1,4 @@
+# Optional / heavy dependencies (installed separately)
+prophet>=1.1
+umap-learn>=0.5
+playwright>=1.40

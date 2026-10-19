@@ -1,0 +1,22 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: dim_users
+      - name: dim_kyc
+      - name: fact_transactions
+      - name: fact_deposit_withdraw
+      - name: fact_events
+      - name: fact_campaigns
+      - name: bridge_campaign_user
+      - name: fact_ads_spend
+      - name: fact_social_metrics
+      - name: fact_touchpoints
+      - name: fact_page_modules
+      - name: fact_cta_experiments
+      - name: fact_ab_assignments
+      - name: dim_user_tags
+      - name: fact_ltv_labels
+      - name: fact_funnel_snapshot

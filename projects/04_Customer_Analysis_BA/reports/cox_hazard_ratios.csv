@@ -1,0 +1,15 @@
+covariate,coef,hazard_ratio,p_value
+register_channel_referral,1.1421476369382426,3.133,0.0
+register_channel_organic,1.0330097125223692,2.81,0.0
+register_channel_brand_search,1.0077190627361583,2.739,0.0
+register_channel_google_ads,0.5428093758955499,1.721,0.0
+register_channel_twitter,0.29438453467800596,1.342,0.0
+register_channel_telegram,0.28585047291433774,1.331,0.0
+register_device_type_ios,0.18256614606449661,1.2,0.0
+register_channel_kol,0.09339773672706543,1.098,0.14708
+kyc_area_CHINA,0.007652004082771688,1.008,0.80436
+register_device_type_web,-0.06317566659800483,0.939,0.03396
+kyc_area_GLOBAL,-0.11652785552948344,0.89,4e-05
+kyc_area_SEA,-0.201338289083826,0.818,0.0
+kyc_area_EUROPE,-0.36557020335434,0.694,0.0
+is_robot,-2.9903536664696064,0.05,0.0

@@ -22,3 +22,14 @@ tmp/
 Thumbs.db
 .idea/
 .vscode/
+
+# ---- project runtime artefacts ----
+warehouse.duckdb
+*.duckdb
+*.duckdb.wal
+data/raw/
+logs/
+dbt_project/target/
+dbt_project/logs/
+dbt_project/dbt_packages/
+.env
