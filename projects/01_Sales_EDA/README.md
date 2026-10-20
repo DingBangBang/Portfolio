@@ -7,6 +7,7 @@
 - 主要语言：`Python`（Jupyter Notebook）
 - 核心文件：[Sales_19Dec_overview.ipynb](./Sales_19Dec_overview.ipynb)
 - 便于阅读的成品：[分析报告 PDF](./forvisit/forshare_Sales_19Dec_overview.pdf) · [HTML](./forvisit/forshare_Sales_19Dec_overview.html)
+- 便于查看的JupyterLab代码及其输出结果：[nbviewer of jupyter notebook](https://nbviewer.org/github/DingBangBang/Portfolio/blob/main/projects/01_Sales_EDA/Sales_19Dec_overview.ipynb)
 
 ## 1. 项目背景
 
@@ -15,6 +16,50 @@
 - 数据来源：[Ecommerce events history in cosmetics shop (Kaggle)](https://www.kaggle.com/datasets/mkechinov/ecommerce-events-history-in-cosmetics-shop/data)
 - 时间范围：2019-10 ~ 2020-02（本文以 2019-12 月为例）
 - 数据结构：`event_time / event_type / product_id / category_id / category_code / brand / price / user_id / user_session`
+- 代码内容目录
+```
+1  Preliminary EDA
+1.1  Data Overview
+1.2  Global Metrics
+1.3  uv&pv
+1.3.1  order
+1.3.2  GMV
+1.3.3  price
+1.3.4  event type
+1.2  Rawdata Cleaning
+2  CUSTOMER ANALYSIS
+2.1  Key Point Indicators KPI
+2.1.1  gross conversion rate
+2.1.2  purchase frequency
+2.1.3  repurchase rate
+2.1.4  churn rate
+2.2  Customer Lifetime Value LTV/CLV
+2.2.1  total LTV by Aggregate Model
+2.2.2  precised LTV by Cohort Model(RFM)
+2.3  User Segmentation
+2.3.1  segmentation criteria 3Dscatterplot
+2.3.2  user tags distribution multichart
+2.4  Predictive LTV by Probabilistic Model
+3  PLATFORM ANALYSIS
+3.1  User Engagement
+3.1.1  daily engagement lineplot
+3.1.2  hourly engagement lineplot
+3.1.3  monthly traffic heatmap
+3.2  Traceable Conversion Rate
+3.2.1  total conversion rate
+3.3  Retention Rate
+3.4  User Stickness
+3  BRAND AND PRODUCT ANALYSIS
+3.1  Performance of Brands
+3.1.1  problematic brands
+3.1.2  KA list for brands
+3.2  Performance of Products
+3.2.1  basket analysis by corr
+3.2.1  co-ocurrence matix
+3.3  Write into Excel
+3.4  Send Emails
+3  SUMMARY
+```
 
 ## 2. 技术栈
 
