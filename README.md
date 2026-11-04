@@ -21,14 +21,14 @@
 
 ```
 Portfolio/
-├── projects/                       # 对外展示的项目
+├── projects/
 │   ├── 01_Sales_EDA/
 │   ├── 02_KA_Dashboard/
 │   ├── 03_Periodic_Reports_Automation/
 │   ├── 04_Customer_Analysis_BA/
 │   ├── 05_Comments_NLP/
 │   └── 06_Onchain_AML_Arbitrage/
-└── archive/                        # 仅作历史留存、不对外展示
+└── archive/
 ```
 
 - 每个 `projects/xx_*/` 目录都自带 `README.md`（中文）与 `README_EN.md`（English）。
