@@ -26,7 +26,7 @@ flowchart LR
     A[以太坊主网<br/>RPC 节点] -->|web3.py get_block / get_logs| B[原始转账记录]
     B -->|csv| C[transactions.csv<br/>usdt_transfers.csv]
     C -->|unify_csv_format.py<br/>统一表头| D[*_unified.csv]
-    [//]: # (D -->|neo4j-admin import| E[(Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address)])
+    %% D -->|neo4j-admin import| E[(Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address)]
     D -->|neo4j-admin import| E[("Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address")]
     E --> F[AML: 拆分追踪<br/>Cypher 变长路径]
     E --> G[套利: 汇率闭环<br/>reduce 连乘]
