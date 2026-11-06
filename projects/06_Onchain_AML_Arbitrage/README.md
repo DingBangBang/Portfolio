@@ -26,7 +26,8 @@ flowchart LR
     A[以太坊主网<br/>RPC 节点] -->|web3.py get_block / get_logs| B[原始转账记录]
     B -->|csv| C[transactions.csv<br/>usdt_transfers.csv]
     C -->|unify_csv_format.py<br/>统一表头| D[*_unified.csv]
-    D -->|neo4j-admin import| E[(Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address)]
+    [//]: # (D -->|neo4j-admin import| E[(Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address)])
+    D -->|neo4j-admin import| E[("Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address")]
     E --> F[AML: 拆分追踪<br/>Cypher 变长路径]
     E --> G[套利: 汇率闭环<br/>reduce 连乘]
     H[Uniswap V2 池子] -->|getReserves| I[assets_core.csv<br/>trading_pairs_core.csv]
@@ -144,6 +145,6 @@ push 前自查发现的，已经轮换，现在统一从 `.env` 读，仓库里�
 
 ## 10. 致谢 / 开发说明
 
-- Cypher 查询、两跳追踪思路、套利收益计算（含手续费）是我自己写的并验证过；
-- `config_loader.py`、`docker-compose.yml`、`unify_csv_format.py` 的骨架由 Cline 辅助生成，我按实际的 CSV 表头调过；
+- Cypher 查询、两跳追踪思路、套利收益计算（含手续费）是从0到1搭建并实际验证过策略和逻辑都是确确实实能有Profit的；
+- `config_loader.py`、`docker-compose.yml`、`unify_csv_format.py` 的思路骨架伪代码由Agent辅助生成，而后我在此基础上丰富；
 - 脚本里的 RPC / 密码已全部改为环境变量，示例地址和密钥均为占位符；数据来源是以太坊公开链上数据。
