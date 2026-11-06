@@ -4,6 +4,7 @@ venv/
 env/
 .env
 .env.*
+!.env.example
 
 # ----- 缓存 -----
 __pycache__/
@@ -16,6 +17,10 @@ __pycache__/
 logs/
 tmp/
 *.tmp
+
+# ----- 本机配置（RPC / Neo4j 密码）-----
+config.yaml
+.env
 
 # ----- 编辑器 / 操作系统 -----
 .DS_Store

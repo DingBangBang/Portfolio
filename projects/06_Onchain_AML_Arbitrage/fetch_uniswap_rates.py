@@ -7,11 +7,18 @@
 # # ====================================================== 版本二：聚焦核心高流动性池子。这会从"漫无目的地扫全链"变成"精准打击核心交易对"，速度从几周缩短到几分钟(fetch_core_pairs.py)。 ==============
 import csv
 import time
-from web3 import Web3, HTTPProvider
-from tqdm import tqdm
 
-# === 配置 ===
-RPC_URL = "https://mainnet.infura.io/v3/4236db2d3bc043bcb27132f759bbcb86"  # 替换为你的 RPC
+from tqdm import tqdm
+from web3 import HTTPProvider, Web3
+
+from config_loader import load_config, require_rpc, setup_logging
+
+log = setup_logging("uniswap")
+
+# === 配置：RPC 走 .env，池子间的 sleep 走 config.yaml ===
+CFG = load_config()
+RPC_URL = require_rpc(CFG)
+SLEEP_SECONDS = float(CFG.get("uniswap", {}).get("sleep_seconds", 0.2))
 
 # === 核心池子列表 ===
 CORE_PAIRS = [
@@ -77,7 +84,7 @@ ERC20_ABI = [
 w3 = Web3(HTTPProvider(RPC_URL))
 if not w3.is_connected():
     raise Exception("❌ 节点连接失败，请检查 RPC URL")
-print(f"✅ 连接成功，当前区块: {w3.eth.block_number}")
+log.info("连接成功，当前区块 %s", w3.eth.block_number)
 
 # === 准备 CSV 文件 ===
 nodes_file = open('assets_core.csv', 'w', newline='')
@@ -91,7 +98,7 @@ rels_writer.writerow([':START_ID(Asset)', ':END_ID(Asset)', 'rate:float', 'pair_
 seen_tokens = set()
 
 # === 遍历核心池子 ===
-print(f"🔍 开始扫描 {len(CORE_PAIRS)} 个核心交易对...")
+log.info("开始扫描 %s 个核心交易对", len(CORE_PAIRS))
 
 for pair_info in tqdm(CORE_PAIRS):
     try:
@@ -106,7 +113,7 @@ for pair_info in tqdm(CORE_PAIRS):
         reserve1 = reserves[1]
         
         if reserve0 == 0 or reserve1 == 0:
-            print(f"⚠️ {pair_name} 流动性为0，跳过")
+            log.warning("%s 流动性为 0，跳过", pair_name)
             continue
         
         # 读取两个代币地址
@@ -148,26 +155,24 @@ for pair_info in tqdm(CORE_PAIRS):
         rels_writer.writerow([token0_addr, token1_addr, rate, pair_address])
         rels_writer.writerow([token1_addr, token0_addr, 1/rate, pair_address])
         
-        print(f"✅ {pair_name}: 1 {symbol0} = {rate:.6f} {symbol1}")
+        log.info("%s: 1 %s = %.6f %s", pair_name, symbol0, rate, symbol1)
         
         # 每处理一个池子 flush 一次
         rels_file.flush()
         nodes_file.flush()
         
         # 小延迟，避免 RPC 限流
-        time.sleep(0.2)
+        time.sleep(SLEEP_SECONDS)
         
     except Exception as e:
-        print(f"⚠️ {pair_name} 处理失败: {e}")
+        log.warning("%s 处理失败：%s", pair_name, e)
         continue
 
 # === 关闭文件 ===
 nodes_file.close()
 rels_file.close()
 
-print(f"\n✅ 导出完成！")
-print(f"   - 资产节点: {len(seen_tokens)} 个")
-print(f"   - 交易对关系: {len(CORE_PAIRS) * 2} 条（含双向）")
+log.info("导出完成：%s 个资产节点，%s 条关系（含双向）", len(seen_tokens), len(CORE_PAIRS) * 2)
 
 
 # # ====================================================== 版本一：调用 Factory 合约，有一个超过50d的全量扫描的时间。 ======================================================
@@ -194,7 +199,7 @@ print(f"   - 交易对关系: {len(CORE_PAIRS) * 2} 条（含双向）")
 
 
 # # === 配置 ===
-# RPC_URL = "https://mainnet.infura.io/v3/4236db2d3bc043bcb27132f759bbcb86"  # 我的RPC节点url
+# RPC_URL = "https://mainnet.infura.io/v3/YOUR_PROJECT_ID"  # 我的RPC节点url
 # FACTORY_ADDRESS = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"  # Uniswap V2 Factory
 
 # # === ABI 定义 ===
@@ -274,7 +279,7 @@ print(f"   - 交易对关系: {len(CORE_PAIRS) * 2} 条（含双向）")
 # w3 = Web3(HTTPProvider(RPC_URL))
 # if not w3.is_connected():
 #     raise Exception("❌ 节点连接失败，请检查 RPC URL")
-# print(f"✅ 连接成功，当前区块: {w3.eth.block_number}")
+# log.info("连接成功，当前区块 %s", w3.eth.block_number)
 
 
 # # # === 连接 ===
@@ -304,7 +309,7 @@ print(f"   - 交易对关系: {len(CORE_PAIRS) * 2} 条（含双向）")
 # # # 验证连接
 # # if not w3.is_connected():
 # #     raise Exception("❌ 节点连接失败，请检查 RPC URL 和代理配置")
-# # print(f"✅ 连接成功，当前区块: {w3.eth.block_number}")
+# # log.info("连接成功，当前区块 %s", w3.eth.block_number)
 
 
 # # === 获取 Factory 合约 ===

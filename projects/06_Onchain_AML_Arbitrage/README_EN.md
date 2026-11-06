@@ -1,90 +1,134 @@
-# 06 · On-chain AML & Arbitrage Path Mining (Onchain_AML_Arbitrage)
+# 06 · On-chain AML and Arbitrage Path Mining (Onchain_AML_Arbitrage)
 
 > 中文版 → [README.md](./README.md)
 
-**_Two cases on Ethereum data with a Neo4j graph database: AML fund-splitting tracing and Uniswap multi-hop arbitrage path mining._**
+**_Addresses are nodes, transfers are edges. Multi-hop queries in SQL are painful; in a graph database they are the point._**
 
 - Language: `Cypher` `Python`
-- Core file: [neo4j_arbitrage_mining.cypher](./neo4j_arbitrage_mining.cypher)
-- Screenshots: [AML graph analysis](./Neo4j_cypher_analysis_AML.png) · [Arbitrage paths](./DeFi%20Arbitrage%20Path%20Discovery%20on%20Neo4j.png)
+- Core queries: [AML fan-out](./neo4j_aml_fanout_ana.cypher) · [arbitrage mining](./neo4j_arbitrage_mining.cypher)
+- Screenshots: [AML graph](./Neo4j_cypher_analysis_AML.png) · [arbitrage path](./DeFi%20Arbitrage%20Path%20Discovery%20on%20Neo4j.png)
 
-## 1. Background
+---
 
-On-chain data is naturally a graph: addresses are nodes, transfers are edges. Multi-hop questions like "where does this money end up after being split across layers" are painful in a relational DB but a native fit for a graph DB's variable-length path queries. This project lands two typical risk / trading scenarios in Neo4j:
+## 1. Why a graph database
 
-- **Case 1 · AML**: identify suspicious addresses doing fan-out (splitting) transfers and trace the full fund path;
-- **Case 2 · DeFi arbitrage**: read Uniswap V2 pool reserves, compute pair rates, and mine multi-hop cyclic arbitrage paths.
+On-chain data is a graph. "Where did this money end up after being split four times" is four self-joins in MySQL (half an hour to write, then you wait), and one variable-length pattern `[:SENT*1..3]` in Neo4j.
 
-## 2. Stack
+Two cases in this project:
 
-| Stage | Tools |
-| --- | --- |
-| On-chain reads | `web3.py` (Infura RPC / Ethereum mainnet) |
-| Data processing | `pandas` (with a `tqdm` progress bar) |
-| Graph database | `Neo4j` (`neo4j-admin import` bulk load + Cypher) |
-| Python driver | official `neo4j` driver |
-| Visualisation | Neo4j Browser |
+- **AML**: find fan-out structures (one address paying many), then reconstruct where funds land two hops later;
+- **Arbitrage**: read Uniswap V2 reserves, compute live rates, find closed loops in the graph, and check whether anything is left after the 0.3% fee.
 
-## 3. Data
+## 2. Data flow
 
-Flow: **Ethereum mainnet (Infura RPC) → web3.py → Python computation → CSV → Neo4j bulk import → Cypher analysis**.
+```mermaid
+flowchart LR
+    A[Ethereum mainnet<br/>RPC node] -->|web3.py get_block / get_logs| B[raw transfers]
+    B -->|csv| C[transactions.csv<br/>usdt_transfers.csv]
+    C -->|unify_csv_format.py| D[*_unified.csv]
+    D -->|neo4j-admin import| E[(Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address)]
+    E --> F[AML: fan-out tracing]
+    E --> G[arbitrage: rate loops<br/>reduce multiply]
+    H[Uniswap V2 pools] -->|getReserves| I[assets_core.csv<br/>trading_pairs_core.csv]
+    I --> E
+```
 
-| File | Content | Scale (example) |
+## 3. Data volume (sample batch)
+
+| File | Content | Size |
 | --- | --- | --- |
-| `nodes_addresses.csv` | Address nodes (`:ID(Address)`) | ~56,286 addresses |
-| `transactions.csv` | Native transfers (from → to, value, hash) | ~73,876 edges |
-| `usdt_addresses.csv` | USDT(ERC-20) address nodes | ~1,251 addresses |
-| `usdt_transfers.csv` | USDT Transfer event edges | ~1,037 edges |
-| `assets_core.csv` / `trading_pairs_core.csv` | Core token nodes and pair rates | 10 core pools |
-| `*_unified.csv` | Header-unified import files (`value:string` + `block_number:int`) | — |
+| `nodes_addresses.csv` | address nodes | ~56,286 |
+| `transactions.csv` | native transfers | ~73,876 |
+| `usdt_addresses.csv` | USDT address nodes | ~1,251 |
+| `usdt_transfers.csv` | USDT Transfer events | ~1,037 |
+| `assets_core.csv` / `trading_pairs_core.csv` | tokens and rates | 10 pools |
 
-## 4. Key findings / design notes
+## 4. What the two cases showed
 
-**AML fund-splitting tracing**
+**AML**
 
-- Identify intermediary addresses with variable-length paths: from a suspect address, find fan-out structures where one intermediary sends to multiple distinct receivers, ranked by fan-out count;
-- Trace the two-hop path "suspect → intermediary → final receiver" to reassemble scattered transfers into a fund chain;
-- Wrap the queries in Python (`aml_analysis.py`) to output, for any address, "in/out overview + splitting-risk addresses + final flow" in one shot.
+- The fan-out query ranks intermediate addresses directly; in this sample one intermediate address paid 17 distinct downstream addresses;
+- Two-hop paths let you regroup the split money, and fan-out count plus receiver overlap is usually enough to eyeball whether someone is structuring;
+- `aml_analysis.py` chains the three queries so switching address is one config change.
 
-**Uniswap arbitrage mining**
+**Arbitrage**
 
-- Read `getReserves()` for core Uniswap V2 pools, compute `rate = reserve1/reserve0`, and write bidirectional `TRADING_PAIR` edges;
-- Find closed loops with the same start and end node (2–6 hops), multiplying hop rates via `reduce(acc * rel.rate)` to get `finalAmount`; `> 1` means an arbitrage window;
-- Recompute net profit after Uniswap's 0.3% fee (each hop × `0.997`) to avoid paper-only arbitrage;
-- Measured: the 3-hop `USDC → WETH → WBTC → USDC` path gives `finalAmount ≈ 1.001377`, i.e. ~`0.1377%` net — small, but exactly what high-frequency bots target;
-- Also runs data-quality checks: rate consistency (A→B→A ≈ 1) and detection of one-way pairs.
+- `USDC → WETH → WBTC → USDC` gives `finalAmount ≈ 1.001377`; after 0.3% per hop the net is about 0.1377%;
+- Thin, but that is exactly the MEV bots' hunting range — the honest conclusion is "not a manual trade";
+- I also ran a rate consistency check (A→B→A should be ≈ 1), **which is how I found two pool addresses I had copied from a blog were wrong**.
 
-## 5. Layout
+## 5. Performance (local, single machine)
+
+| Step | Volume | Time |
+| --- | --- | --- |
+| Export 1,000 blocks of native transfers | 73,876 edges | ~7 min (RPC bound) |
+| Export 10 blocks of USDT transfers | 1,037 | ~8s |
+| `neo4j-admin import` | 50k+ nodes | ~30s |
+| Three-hop arbitrage query | 10 pools | < 0.2s |
+| Fan-out query | 50k nodes | ~1s |
+
+## 6. Layout
 
 ```
 06_Onchain_AML_Arbitrage/
-├── export_transactions.py       # Case 1: export native transfer CSVs (nodes + edges)
-├── export_erc20_to_csv.py       # Case 1: export USDT(ERC-20) transfer event CSVs
-├── export_erc20.py              # ERC-20 event reads (incl. ABI-loading debugging)
-├── unify_csv_format.py          # Unify CSV headers for neo4j-admin import
-├── aml_analysis.py              # Case 1: three-part analysis of a suspect address
-├── aml_tracing.py               # Neo4j connection & query skeleton
-├── neo4j_aml_fanout_ana.cypher  # Case 1: fund-splitting Cypher
-├── fetch_uniswap_rates.py       # Case 2: read Uniswap reserves and compute rates
-├── neo4j_arbitrage_mining.cypher    # Case 2: arbitrage path mining Cypher (core code)
-└── *.csv / *.png                # Import data and result screenshots
+├── config_loader.py              # single entry for config + logging
+├── config.example.yaml           # block range, output names, pool sleep
+├── .env.example                  # RPC_URL / NEO4J_PASSWORD
+├── docker-compose.yml            # local Neo4j 5
+├── export_transactions.py        # native transfers → CSV
+├── export_erc20_to_csv.py        # USDT Transfer events → CSV
+├── export_erc20.py               # debug version, kept for reference
+├── unify_csv_format.py           # header normalisation for neo4j-admin import
+├── aml_analysis.py               # the three AML queries
+├── aml_tracing.py                # connection smoke test
+├── fetch_uniswap_rates.py        # reserves → rates
+└── *.cypher                      # the actual analysis
 ```
 
-## 6. How to run
+## 7. How to run
 
-**Env**: start Neo4j locally or via Docker (default `bolt://localhost:7687`).
+```bash
+cp .env.example .env && docker compose up -d
+pip install -r requirements.txt
+python export_transactions.py
+python unify_csv_format.py
+docker exec -it onchain_neo4j neo4j-admin database import full neo4j \
+  --nodes=/import/nodes_addresses_fixed.csv --relationships=/import/transactions_unified.csv
+python aml_analysis.py
+python fetch_uniswap_rates.py
+```
 
-1. **Export on-chain data**: replace `RPC_URL` in `export_transactions.py` / `export_erc20_to_csv.py` with your own Infura (or other) node, then run to get the `nodes/transactions/usdt_*` CSVs;
-2. **Unify format**: `python unify_csv_format.py` produces `*_unified.csv`;
-3. **Bulk import**:
-   ```
-   neo4j-admin database import full neo4j \
-     --nodes=nodes_addresses_fixed.csv \
-     --relationships=transactions_unified.csv \
-     --nodes=usdt_addresses_fixed.csv \
-     --relationships=usdt_transfers_unified.csv
-   ```
-4. **AML analysis**: run `neo4j_aml_fanout_ana.cypher` in Neo4j Browser, or `python aml_analysis.py` (change `PASSWORD` to yours);
-5. **Arbitrage mining**: run `python fetch_uniswap_rates.py` to generate pair rates, import them, then run `neo4j_arbitrage_mining.cypher`.
+## 8. Things that went wrong (and the compromises)
 
-> ⚠️ The `RPC_URL / API key / password` in the scripts are historical examples. Replace them with your own and keep them safe — never commit real secrets.
+**1) Infura free tier ran out.**
+100k requests/day; trying to scan the whole chain got me 429s within half an hour. Fixes: export narrow block ranges only, and `sleep(0.2)` between RPC calls. Slow, free.
+
+**2) `get_logs` caps at 10,000 results.**
+USDT alone blows past that in 10 blocks. The script now prints the actual hint ("shrink the range") so future-me does not debug it again.
+
+**3) `value` as `long` overflowed on import.**
+Wei has 18 decimals, large transfers exceed Java long, and the import error message does not say which column. Switched to `value:string`. `unify_csv_format.py` exists because of this — a whole script to patch headers, a bit silly, but cheaper than re-exporting.
+
+**4) The importer is unforgiving about headers.**
+Column names, order and type suffixes must match exactly; a mismatch fails the whole batch and the error only names the row. Hence the `*_unified.csv` and `*_fixed.csv` copies — ugly filenames, saved me from regenerating data.
+
+**5) Two pool addresses were wrong.**
+`WETH-UNI` and `WETH-LINK` came from an old blog post. Found it by accident: the A→B→A consistency check returned 0.7 instead of 1. After fixing, everything is ≈ 1.0.
+
+**6) `0xSuspicious001` is a made-up address.**
+The sample suspect address is synthetic, not a real case. Point `suspect_address` in `config.yaml` at a real address to rerun.
+
+**7) The Infura key used to be hardcoded in five scripts.**
+Caught during a pre-push review, rotated, and everything now reads from `.env`. A grep for the old key returns nothing.
+
+## 9. TODO
+
+- [ ] Move to a paid RPC (Alchemy) so full-chain scans stop getting throttled;
+- [ ] Incremental import instead of rebuilding the database each time;
+- [ ] Fully parameterise Cypher, `--address` on the command line instead of config edits;
+- [ ] Only Uniswap V2 so far; V3 concentrated liquidity changes the maths completely, not touching it yet;
+- [ ] Add a block timestamp property; estimating time from block height is awkward.
+
+## 10. Credits
+
+The Cypher queries, the two-hop tracing approach and the fee-adjusted arbitrage maths are mine and validated. `config_loader.py`, `docker-compose.yml` and the `unify_csv_format.py` skeleton were drafted with Cline and adapted to the real CSV headers. All keys and passwords are environment variables now; sample addresses are placeholders; data comes from public Ethereum on-chain records.

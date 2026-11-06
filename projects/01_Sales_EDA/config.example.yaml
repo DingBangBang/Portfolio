@@ -1,0 +1,10 @@
+# 复制一份改名 config.yaml 再改；config.yaml 已经在 .gitignore 里，不会提交
+# 之所以搞个配置文件：本机路径、分块大小这些每次换机器都要改，写在代码里太烦
+
+data_path: "data/2019-Dec.csv"   # Kaggle 下载的原始 CSV，放哪写哪
+output_dir: "outputs"            # 漏斗 json、分层 csv 都丢这里
+chunk_size: 500000               # 一行一个事件，12 月大概 350 万行
+
+# 踩过的坑，留个记录：
+# chunk_size 试过 200000，跑完整月要 11 分钟，太慢；
+# 500000 大约 3 分半，内存峰值 1.2G 左右，我这台 8G 的机器刚好够。

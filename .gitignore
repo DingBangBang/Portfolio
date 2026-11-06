@@ -11,6 +11,7 @@ env/
 ENV/
 .env
 .env.*
+!.env.example
 
 # ----- Python 缓存 / 构建产物 -----
 __pycache__/

@@ -1,0 +1,10 @@
+# 02 KA_Dashboard 依赖
+# SQL 是主体，Python 只用来做沙盘推演 / 取数
+
+pandas>=1.5,<3.0
+numpy>=1.23
+pyyaml>=6.0
+python-dotenv>=1.0     # 从 .env 读数据库密码，别再写死在代码里
+pymysql>=1.0           # 连 MySQL
+cryptography>=41.0     # MySQL 8 默认 caching_sha2_password 认证要靠它，少装会报错
+plotly>=5.15           # 看分布用的，可选

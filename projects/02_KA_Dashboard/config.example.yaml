@@ -1,0 +1,27 @@
+# 复制成 config.yaml 再改。真库的账号密码走环境变量 / .env，别写进这里
+# （吃过教训：有次把密码提交到公共仓库，被安全同学找上门）
+
+# ---- 数据源 ----
+# 优先连库；连不上就用 sample_data 里的快照 CSV 跑一遍，方便没环境的人复现
+use_db: false
+db:
+  host: "127.0.0.1"
+  port: 3306
+  user: "root"
+  password: ""        # 建议留空，用 .env 里的 KA_DB_PASSWORD
+  database: "retail"
+
+sample_csv: "sample_data/ka_snapshot_sample.csv"
+
+# ---- 分层阈值（口径跟 ka_dashboard_sql.sql 一致：score = 近30天交易额 + 总资产*30）----
+tiers:
+  ka3: 5000000        # PREMIUM
+  ka2: 300000         # REGULAR
+  ka1: 30000          # BASIC
+
+# 资产折算系数。为什么乘 30：资产是存量、交易额是流量，
+# 老板要求「一个月不怎么交易但躺着 100 万美金的人也算大客户」，
+# 折算系数按业务口径讨论后定的 30，不是拍脑袋（虽然也差不多）
+auc_weight: 30
+
+output_dir: "outputs"

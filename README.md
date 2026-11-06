@@ -17,6 +17,20 @@
 | 05 | [Online_Retail_Comments_NLP](./projects/05_Comments_NLP) | <sub>从多源爬虫采集电商/社区评论文本，完成中文分词、情感倾向、词云与 LDA 主题聚类的完整 NLP 流程。</sub> | `Python` | `requests` `lxml` `BeautifulSoup` `Selenium` `Scrapy` `jieba` `SnowNLP` `gensim` `pyLDAvis` `wordcloud` | [README](./projects/05_Comments_NLP/README.md) | [LDA 主题聚类实现](./projects/05_Comments_NLP/Tmall_Review_Crawling_and_LDA-Based_Topic_Clustering_Implementation.py) | [正面评论词云](./projects/05_Comments_NLP/thesis_project/wordcloud_from_fre_pos.png) |
 | 💡06 | [Onchain_AML_Arbitrage](./projects/06_Onchain_AML_Arbitrage) | <sub>基于以太坊链上数据与 Neo4j 图数据库，做反洗钱资金拆分追踪与 Uniswap 多跳套利路径挖掘。</sub> | `Cypher` `Python` | `web3` `neo4j` `pandas` `tqdm` | [README](./projects/06_Onchain_AML_Arbitrage/README.md) | [neo4j_arbitrage_mining.cypher](./projects/06_Onchain_AML_Arbitrage/neo4j_arbitrage_mining.cypher) | [AML 图谱分析](./projects/06_Onchain_AML_Arbitrage/Neo4j_cypher_analysis_AML.png) |
 
+## 🚀 想直接跑起来
+
+每个项目都留了最小可运行入口，不接真实库也能看效果（用的是仓库里的样例数据）：
+
+| 项目 | 一条命令 | 说明 |
+| --- | --- | --- |
+| 01 Sales_EDA | `python src/eda_funnel.py` → `streamlit run app.py` | 漏斗/复购口径，加一个速览页 |
+| 02 KA_Dashboard | `docker compose up -d` → `python src/ka_tier.py` | 本地 MySQL + 分层沙盘推演 |
+| 03 Periodic_Reports | `python src/report_pipeline.py` | 出一份 HTML + Excel 周报，不发邮件 |
+| 05 Comments_NLP | `streamlit run app.py` | 读样例评论，看情感和词频 |
+| 06 Onchain_AML | `docker compose up -d` → `python aml_analysis.py` | 本地 Neo4j，前提是导过数据 |
+
+各自的 `config.example.yaml` 复制成 `config.yaml` 填一下就能跑；密钥统一走 `.env`，仓库里不放。
+
 ## 🧭 目录结构
 
 ```

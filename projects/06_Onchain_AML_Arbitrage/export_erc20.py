@@ -1,9 +1,19 @@
+"""ERC-20 Transfer 事件读取（调试版）。
+
+说明：这份跟 export_erc20_to_csv.py 功能重叠，是当初调 ABI 加载时留下的，
+输出更啰嗦。现在主流程用 export_erc20_to_csv.py，这份留着备查，
+RPC 也统一从 .env 读了，别再往里加新功能。
+"""
+
 import json
+
 from web3 import Web3
 
-# === 配置 ===
-RPC_URL = "https://mainnet.infura.io/v3/4236db2d3bc043bcb27132f759bbcb86"
-TOKEN_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+from config_loader import load_config, require_rpc
+
+CFG = load_config()
+RPC_URL = require_rpc(CFG)
+TOKEN_ADDRESS = CFG["erc20"]["token_address"]
 
 # === 连接以太坊节点 ===
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
@@ -64,7 +74,7 @@ import json
 from web3 import Web3
 
 # === 配置 ===
-RPC_URL = "https://mainnet.infura.io/v3/4236db2d3bc043bcb27132f759bbcb86"
+RPC_URL = "https://mainnet.infura.io/v3/YOUR_PROJECT_ID"
 TOKEN_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
 
 # === 连接以太坊节点 ===
@@ -112,7 +122,7 @@ import json
 from web3 import Web3
 
 # 注意：这里是你连接以太坊节点的 RPC 地址（Infura 等），保持不变
-w3 = Web3(Web3.HTTPProvider("https://mainnet.infura.io/v3/4236db2d3bc043bcb27132f759bbcb86"))
+w3 = Web3(Web3.HTTPProvider("https://mainnet.infura.io/v3/YOUR_PROJECT_ID"))
 
 token_address = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
 
@@ -153,7 +163,7 @@ import json
 from web3 import Web3
 
 # === 配置 ===
-RPC_URL = "https://mainnet.infura.io/v3/4236db2d3bc043bcb27132f759bbcb86"
+RPC_URL = "https://mainnet.infura.io/v3/YOUR_PROJECT_ID"
 ETHERSCAN_API_KEY = "16VS1J8FBC2Y26B5JV15AKSINZYMI3D5BM"
 TOKEN_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
 

@@ -1,30 +1,35 @@
+# -*- coding: utf-8 -*-
+"""可疑地址三连分析：资金进出 / 拆分转账 / 最终流向。
+
+就是个把三条 Cypher 串起来的脚本，没做成库 —— 每次都是临时换个地址跑一下，
+包装成类反而更啰嗦。
+"""
+
 from neo4j import GraphDatabase
 
-# 数据库连接配置（请改成你自己的密码）
-URI = "bolt://localhost:7687"
-USERNAME = "neo4j"
-PASSWORD = "your_password"  # 替换成你的密码
+from config_loader import load_config, setup_logging
 
-# 创建数据库连接的"钥匙"
-driver = GraphDatabase.driver(URI, auth=(USERNAME, PASSWORD))
+log = setup_logging("aml")
+
+CFG = load_config()
+NEO = CFG["neo4j"]
+
+# 密码从 .env 的 NEO4J_PASSWORD 读；原来写死 "your_password"，
+# 后来换成真密码，push 前差点连密码一起提交
+driver = GraphDatabase.driver(NEO["uri"], auth=(NEO["user"], NEO["password"]))
+
 
 def run_query(query, parameters=None):
-    """
-    这个函数的作用：把要执行的Cypher查询和参数发给数据库，把返回的结果转换成Python能用的格式。
-    通俗理解：这就是你和数据库之间的"传话员"。
-    """
+    """把 Cypher 和参数丢给数据库，结果转成 list[dict] 方便处理。"""
     with driver.session() as session:
         result = session.run(query, parameters)
-        # 把每条记录转成字典，方便后续处理
         return [record.data() for record in result]
 
+
 def analyze_suspicious_address(suspect_address):
-    """
-    核心分析函数：对给定的可疑地址，自动完成三个维度的分析
-    """
-    print(f"🔍 开始分析可疑地址: {suspect_address}")
-    print("=" * 50)
-    
+    """对给定地址做三个维度的分析。"""
+    log.info("开始分析 %s", suspect_address)
+
     # ===== 分析1：资金进出总览 =====
     query1 = """
     MATCH (s:Address {address: $addr})
@@ -36,10 +41,8 @@ def analyze_suspicious_address(suspect_address):
     result1 = run_query(query1, {"addr": suspect_address})
     if result1:
         data = result1[0]
-        print(f"💰 资金进出总览:")
-        print(f"   - 总转出: {data['total_sent'] or 0} USDT")
-        print(f"   - 总转入: {data['total_received'] or 0} USDT")
-    
+        log.info("总转出 %s USDT，总转入 %s USDT", data["total_sent"] or 0, data["total_received"] or 0)
+
     # ===== 分析2：识别拆分转账的中间地址 =====
     query2 = """
     MATCH (s:Address {address: $addr})-[:SENT]->(t1:Transaction)-[:TO]->(m:Address)
@@ -51,31 +54,24 @@ def analyze_suspicious_address(suspect_address):
     ORDER BY fan_out_count DESC
     """
     result2 = run_query(query2, {"addr": suspect_address})
-    print(f"\n⚠️ 拆分转账风险地址 (转出给 >1 个接收方):")
     if result2:
         for row in result2:
-            print(f"   - 地址 {row['middle_address']} 转给了 {row['fan_out_count']} 个不同地址")
+            log.warning("地址 %s 转给了 %s 个不同接收方", row["middle_address"], row["fan_out_count"])
     else:
-        print("   ✅ 未发现明显拆分行为")
-    
-    # ===== 分析3：完整资金路径（可视化用） =====
+        log.info("没发现明显拆分行为")
+
+    # ===== 分析3：两跳之后的资金路径 =====
     query3 = """
     MATCH path = (s:Address {address: $addr})
                   -[:SENT]->(:Transaction)-[:TO]->(:Address)
                   -[:SENT]->(:Transaction)-[:TO]->(r:Address)
     RETURN r.address as final_receiver
     """
-    result3 = run_query(query3, {"addr": suspect_address})
-    receivers = [row['final_receiver'] for row in result3]
-    print(f"\n📊 资金最终流向汇总 (共 {len(set(receivers))} 个不同接收地址):")
-    print(f"   {', '.join(set(receivers))}")
-    
-    print("\n" + "=" * 50)
-    print("✅ 分析完成！")
+    receivers = {row["final_receiver"] for row in run_query(query3, {"addr": suspect_address})}
+    log.info("资金最终流向：%s 个不同地址", len(receivers))
+    log.info("%s", ", ".join(sorted(receivers)) if receivers else "-")
+
 
 if __name__ == "__main__":
-    # 对模拟数据中的可疑地址执行分析
-    analyze_suspicious_address("0xSuspicious001")
-    
-    # 关闭数据库连接
+    analyze_suspicious_address(CFG.get("suspect_address", "0xSuspicious001"))
     driver.close()

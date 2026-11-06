@@ -1,0 +1,25 @@
+# 06 用 Neo4j 存图数据，本地起一个单机版就够（不用集群）
+# 数据导入走 neo4j-admin import，所以要把 import 目录挂进去
+services:
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: onchain_neo4j
+    ports:
+      - "7474:7474"   # browser
+      - "7687:7687"   # bolt
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-changeme}
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - ./:/import:ro          # CSV 放在项目根目录，直接挂进去给 import 用
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      retries: 5
+
+volumes:
+  neo4j_data:
+  neo4j_logs:

@@ -1,0 +1,15 @@
+# 复制成 config.yaml 再改；里面有 cookie，绝对不要提交
+# cookie 会过期，这是常态 —— 我一般两周换一次，脚本里没有自动刷新
+
+crawler:
+  item_id: "557510761368"
+  spu_id: "1067672969"
+  seller_id: "2820842454"
+  start_page: 1
+  pages: 3                 # 每页 20 条，3 页就是 60 条，再多容易被封
+  delay_seconds: [3, 6]    # 每页之间随机 sleep，原来固定 10 秒太慢，固定 1 秒会被限流
+  proxy: ""                # 形如 "http://ip:port"，留空就是直连
+  cookie: ""               # 从浏览器 F12 里复制，粘在这里
+
+output_dir: "outputs"
+font_path: ""              # 词云字体；mac 用 /System/Library/Fonts/PingFang.ttc，win 用 C:/Windows/Fonts/msyh.ttc

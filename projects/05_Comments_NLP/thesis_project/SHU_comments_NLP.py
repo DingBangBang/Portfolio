@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import requests
 import re
@@ -30,7 +32,7 @@ for i in range(1, page, 1):
     headers = {
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:86.0) Gecko/20100101 Firefox/86.0',
         'referer': 'https://list.tmall.com/search_product.htm?q=%D6%B2%B4%E5%D0%E3&type=p&spm=a220m.1000858.a2227oh.d100&from=.list.pc_1_searchbutton',
-        'cookie': 'cna=MQY3F16TIiUCAXj0KLkDrCSr; isg=BAMDf6e9Z11oDhSkH8Y_-OInkceteJe68MstDTXgvWKY9CAWvElzCjQibgS6z--y; tfstk=c7UCBAb24pvCQyTywW1w8hf5io3CZHLI_HMLOkoQGawNk-V1i0YqhJasqdmKSf1..; l=eBPYPbzmOInY98vFKO5Cnurza779fIRV1kPzaNbMiInca1WdNeRHzNCIr97HldtfgtfU-eKzpOD6ydnM-q4LRE_ceTwhKXIpBqp9-; lid=t_1498050231982_0133; enc=pI1QRFc21Y3%2BeedHEHCwaPQQxxXEGuvHw%2BQPROnTlxuv7WPkm%2FsDxEl8DD1HVRvPSq%2BUF6522Tj3eWc3Oe%2BxqQ%3D%3D; sgcookie=E100yGUBtKmZPVt1SUzKwzJN5TgRxYduHpqQ6LEOTNjgevd9Llmpw%2BiCkCNIEFIKzep26emR9fxKMYiZeNBDsRAMnhFLBsy08lT4W%2Fd1g3G%2FCK0cS; lgc=t_1498050231982_0133; _tb_token_=e76dbbf173ee4; cookie2=18ca72ed93207c71af40832a44f69dfd; xlly_s=1; dnk=t_1498050231982_0133; uc1=existShop=false&cookie16=UtASsssmPlP%2Ff1IHDsDaPRu%2BPw%3D%3D&cookie21=U%2BGCWk%2F7p4mBoUyS4E9C&cookie15=Vq8l%2BKCLz3%2F65A%3D%3D&cookie14=Uoe1hgR2h5poXQ%3D%3D&pas=0; csg=c34b003f; _l_g_=Ug%3D%3D; unb=3334488617; cookie1=B0OtIf8tUpGpFggiRbxP9Rqge9vJMacTRJkR2cf0lYg%3D; login=true; cookie17=UNN%2BwsEaojiS1g%3D%3D; _nk_=t_1498050231982_0133; sg=37e'
+        'cookie': os.getenv('TMALL_COOKIE', '')  # 别再粘进代码，我吃过一次亏
     }
     try:
         proxy = {'http': '108.49.237.244:80'}
@@ -74,7 +76,7 @@ a2 = len(df1)
 print('========文本去重共删除了%s条评论如下：=========' % (a1 - a2))
 print(df1.head())
 # 2【重点】机械压缩去词（不改变评论条数）
-注释掉是因为没什么意义，去掉了一句中的所有大于1次出现的字
+# 注释掉是因为没什么意义，去掉了一句中的所有大于1次出现的字（这一行的 # 之前丢了，文件一直编译不过）
 ser1 = df1.iloc[:, 0].apply(str_unique)  # 这时，因为索引了第一列，所以结果成了Series；
 print(type(ser1))  # 输出<class 'pandas.core.series.Series'>
 df2 = pd.DataFrame(ser1.apply(str_unique, reverse=True))  # 再次生成DataFrame；

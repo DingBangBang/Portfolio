@@ -1,0 +1,30 @@
+# 复制成 config.yaml 再改。config.yaml / .env 都不提交
+
+# ---- 数据源 ----
+# sample: 读 sample_data 的样例 CSV（没有内网环境时用这个跑通流程）
+# trino:  连公司 Trino 跑 sql/weekly_br.sql
+data_source: "sample"
+sample_csv: "sample_data/weekly_metrics.csv"
+sql_file: "weekly_br.sql"
+trino:
+  host: "trino.internal"      # 换成你自己的
+  port: 8080
+  user: "your_name"
+  catalog: "hive"
+  schema: "retail"
+
+# ---- 产物 ----
+template: "templates/weekly_report.html.j2"
+output_dir: "outputs"
+report_name: "weekly_meeting"   # 最终文件名 weekly_meeting_20240101.html/.xlsx
+
+# ---- 邮件 ----
+# 密码走 .env 的 SMTP_PASSWORD，别写这
+email:
+  enabled: false                # 默认关掉，省得手一抖把测试报表发给全组
+  smtp_host: "smtp.公司域名.com"
+  smtp_port: 465
+  sender: "bi-report@example.com"
+  recipients:
+    - "ops-lead@example.com"
+  subject_prefix: "[周报]"

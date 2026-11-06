@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<!-- 周报模板：表格是死的，数据是活的。想加指标就往 build_tables 里加列 -->
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <title>运营周报 {{ overview.period }}</title>
+</head>
+<body style="margin:0;padding:24px;background:#f4f5f7;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;color:#222;">
+<div style="max-width:860px;margin:0 auto;background:#fff;border-radius:8px;padding:24px 28px;">
+
+    <h2 style="margin:0 0 4px;">运营周报 · {{ overview.period }}</h2>
+    <p style="margin:0 0 20px;color:#888;font-size:12px;">
+        对比期：{{ overview.prev_period or '无' }} ｜ 生成时间：{{ generated_at }} ｜ 本邮件由脚本自动发送，回复不看
+    </p>
+
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <tr>
+            <td style="padding:10px;background:#fafafa;border:1px solid #eee;">交易额（万）</td>
+            <td style="padding:10px;border:1px solid #eee;"><b>{{ wan(overview.tx_amount) }}</b></td>
+            <td style="padding:10px;background:#fafafa;border:1px solid #eee;">周环比</td>
+            <td style="padding:10px;border:1px solid #eee;
+                color:{% if overview.tx_amount_wow < 0 %}#c0392b{% else %}#1e8e3e{% endif %};">
+                {{ pct(overview.tx_amount_wow) }}
+            </td>
+        </tr>
+        <tr>
+            <td style="padding:10px;background:#fafafa;border:1px solid #eee;">交易笔数</td>
+            <td style="padding:10px;border:1px solid #eee;">{{ overview.tx_cases }}</td>
+            <td style="padding:10px;background:#fafafa;border:1px solid #eee;">交易用户</td>
+            <td style="padding:10px;border:1px solid #eee;">{{ overview.tx_users }}</td>
+        </tr>
+        <tr>
+            <td style="padding:10px;background:#fafafa;border:1px solid #eee;">新增用户</td>
+            <td style="padding:10px;border:1px solid #eee;">{{ overview.new_users }}</td>
+            <td style="padding:10px;background:#fafafa;border:1px solid #eee;">KYC 成功率</td>
+            <td style="padding:10px;border:1px solid #eee;">{{ pct(overview.kyc_success_rate) }}</td>
+        </tr>
+    </table>
+
+    <h3 style="margin:24px 0 8px;font-size:15px;">分渠道</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <tr style="background:#fafafa;">
+            <th style="padding:8px;border:1px solid #eee;text-align:left;">渠道</th>
+            <th style="padding:8px;border:1px solid #eee;">交易额（万）</th>
+            <th style="padding:8px;border:1px solid #eee;">上周（万）</th>
+            <th style="padding:8px;border:1px solid #eee;">环比</th>
+            <th style="padding:8px;border:1px solid #eee;">新增</th>
+            <th style="padding:8px;border:1px solid #eee;">首充率</th>
+        </tr>
+        {% for c in channels %}
+        <tr>
+            <td style="padding:8px;border:1px solid #eee;">{{ c.market_source }}</td>
+            <td style="padding:8px;border:1px solid #eee;text-align:right;">{{ wan(c.tx_amount_cur) }}</td>
+            <td style="padding:8px;border:1px solid #eee;text-align:right;">{{ wan(c.tx_amount_prev) }}</td>
+            <td style="padding:8px;border:1px solid #eee;text-align:right;
+                color:{% if c.tx_amount_wow < 0 %}#c0392b{% else %}#1e8e3e{% endif %};">
+                {{ pct(c.tx_amount_wow) }}
+            </td>
+            <td style="padding:8px;border:1px solid #eee;text-align:right;">{{ c.new_user_cnt_cur }}</td>
+            <td style="padding:8px;border:1px solid #eee;text-align:right;">{{ pct(c.first_deposit_rate) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h3 style="margin:24px 0 8px;font-size:15px;">明细</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;color:#555;">
+        <tr style="background:#fafafa;">
+            <th style="padding:6px;border:1px solid #eee;text-align:left;">周期</th>
+            <th style="padding:6px;border:1px solid #eee;text-align:left;">渠道</th>
+            <th style="padding:6px;border:1px solid #eee;text-align:right;">笔数</th>
+            <th style="padding:6px;border:1px solid #eee;text-align:right;">交易额（万）</th>
+        </tr>
+        {% for r in rows %}
+        <tr>
+            <td style="padding:6px;border:1px solid #eee;">{{ r.period }}</td>
+            <td style="padding:6px;border:1px solid #eee;">{{ r.market_source }}</td>
+            <td style="padding:6px;border:1px solid #eee;text-align:right;">{{ r.tx_case_cnt }}</td>
+            <td style="padding:6px;border:1px solid #eee;text-align:right;">{{ wan(r.tx_amount) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <p style="margin:24px 0 0;color:#aaa;font-size:11px;">
+        数据源：周报 SQL（自然周，周一为起始）／组装脚本：src/report_pipeline.py
+    </p>
+</div>
+</body>
+</html>

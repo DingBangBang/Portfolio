@@ -1,0 +1,16 @@
+# 01 Sales_EDA 依赖（notebook + 固化脚本 + 极简看板）
+# 版本没有卡死，都是我自己机器上跑通过的区间，装到更新的版本一般也没事
+
+pandas>=1.5,<3.0
+numpy>=1.23
+scipy>=1.9              # notebook 里做卡方/ttest 用
+scikit-learn>=1.2
+plotly>=5.15            # notebook 的交互图 + app.py 的漏斗图
+matplotlib>=3.6
+seaborn>=0.12
+joblib>=1.2             # notebook 里并行跑 Apriori
+lifetimes>=0.11         # BG/NBD 复购预测
+mlxtend>=0.21           # Apriori 关联规则
+openpyxl>=3.1           # 导出给市场的 xlsx
+pyyaml>=6.0             # 读 config.yaml
+streamlit>=1.25         # app.py

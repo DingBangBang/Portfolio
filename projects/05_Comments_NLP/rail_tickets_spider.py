@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import os
+
 import requests
 import pandas
 import generate_excel
@@ -7,9 +9,10 @@ from bs4 import BeautifulSoup
 import xlwt
 
 # 读取网页内容
-proxy = {'http': '58.253.157.212:9999'}
+proxy = {'http': os.getenv('RAIL_PROXY')} if os.getenv('RAIL_PROXY') else None
 headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:84.0) Gecko/20100101 Firefox/84.0',
-           'cookie': '_uab_collina=160930737494772653755355; JSESSIONID=BFB1E1E649EE8A1CE031075EE0E0BB26; tk=wbQdW_QCHvg9iJysVm5qJ4a-J9AE_v3OdD27fYMK3JYbcD1D0; BIGipServerotn=1324352010.50210.0000; RAIL_EXPIRATION=1609605604064; RAIL_DEVICEID=hOoGafzb48YAh0w6ZvTc9stjFvetESd-gvem4cn88w__9Lpw4u8-MZPvOKg3YCUin4339HIqXJhiu-qW2iNdbqBuJGLqa7DoefbA0MUBqEKqc6eU_c52-xRrxgvbEOeEXQo9XH7uZ698LVGGxEg2kCvF-B1Xbt3o; BIGipServerpool_passport=132383242.50215.0000; route=6f50b51faa11b987e576cdb301e545c4; uKey=2ee6d5fdb429cf3d5ec50ee48d35510a7fc46b9b36cd9879f5d1794ac5ee9df0; current_captcha_type=Z; _jc_save_fromStation=%u5317%u4EAC%2CBJP; _jc_save_toStation=%u5357%u660C%2CNCG; _jc_save_fromDate=2020-12-30; _jc_save_toDate=2020-12-30; _jc_save_wfdc_flag=dc'
+           # cookie 走环境变量，别再写死（12306 的 cookie 半小时就过期）
+   'cookie': os.getenv('RAIL_COOKIE', '')
            }
 # time.sleep(1)→urllib3
 url = 'https://kyfw.12306.cn/otn/leftTicket/queryT?leftTicketDTO.train_date=2021-01-05&leftTicketDTO.from_station=LZJ&leftTicketDTO.to_station=JNK&purpose_codes=ADULT'

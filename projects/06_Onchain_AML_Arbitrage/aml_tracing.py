@@ -1,25 +1,32 @@
+# -*- coding: utf-8 -*-
+"""Neo4j 连接测试。
+
+当初就是想知道 bolt 通不通，留着当 smoke test 用：
+    python aml_tracing.py
+"""
+
 from neo4j import GraphDatabase
 
-# 数据库连接信息 (请根据你的实际设置修改)
-URI = "bolt://localhost:7687"  # 本地连接地址
-USERNAME = "neo4j"
-PASSWORD = "your_password"  # 替换成你自己的密码
+from config_loader import load_config, setup_logging
 
-# 创建驱动实例，这是连接数据库的“钥匙”
-driver = GraphDatabase.driver(URI, auth=(USERNAME, PASSWORD))
+log = setup_logging("tracing")
 
-# 定义一个执行查询的函数
+CFG = load_config()
+NEO = CFG["neo4j"]
+
+driver = GraphDatabase.driver(NEO["uri"], auth=(NEO["user"], NEO["password"]))
+
+
 def execute_query(query, parameters=None):
-    """
-    这个函数就像你的“传话筒”，帮你把 Cypher 问题和参数传给数据库，
-    然后把结果原样带回来给你。
-    """
     with driver.session() as session:
         result = session.run(query, parameters)
         return [record.data() for record in result]
 
-# 测试一下连接：查询数据库版本
-print(execute_query("RETURN 'Connection successful!' as message"))
 
-# 使用完毕后别忘了关闭“钥匙”，这是个好习惯
-# driver.close()
+try:
+    log.info("连上了：%s", execute_query("RETURN 'Connection successful!' as message"))
+except Exception as e:
+    # 连不上最常见的原因是 Neo4j 没起，或者密码还是 changeme
+    log.error("连不上 Neo4j：%s", e)
+finally:
+    driver.close()

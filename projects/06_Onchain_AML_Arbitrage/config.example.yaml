@@ -1,0 +1,31 @@
+# 复制成 config.yaml 再改。RPC 和 Neo4j 密码都在 .env 里，这里不放密钥
+# （原来 Infura 的 key 直接写在五个脚本里，push 前自查发现，赶紧轮换了）
+
+# ---- 原生转账导出 ----
+export:
+  start_block: 19000000
+  end_block: 19001000        # 先导 1000 个区块试试，全量扫要跑很久
+  output_nodes: "nodes_addresses.csv"
+  output_rels: "transactions.csv"
+
+# ---- USDT(ERC-20) 导出 ----
+erc20:
+  token_address: "0xdAC17F958D2ee523a2206206994597C13D831ec7"   # USDT
+  abi_file: "usdt_abi.json"
+  start_block: 25910000
+  end_block: 25910010        # 一次超过 10 个区块基本会被节点拒掉
+  output_nodes: "usdt_addresses.csv"
+  output_rels: "usdt_transfers.csv"
+
+# ---- Uniswap 汇率 ----
+uniswap:
+  sleep_seconds: 0.2         # 每个池子之间歇一下，免费 RPC 限流很狠
+
+# ---- Neo4j ----
+neo4j:
+  uri: "bolt://localhost:7687"
+  user: "neo4j"
+  # password 走 .env 的 NEO4J_PASSWORD
+
+# ---- 分析用的可疑地址（示例）----
+suspect_address: "0xSuspicious001"

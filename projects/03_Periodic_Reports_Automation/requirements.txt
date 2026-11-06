@@ -1,0 +1,9 @@
+# 03 Periodic_Reports_Automation 依赖
+
+pandas>=1.5,<3.0
+jinja2>=3.1            # HTML 模板渲染
+openpyxl>=3.1          # Excel 附件 / 单元格样式
+pyyaml>=6.0
+python-dotenv>=1.0     # SMTP 密码从 .env 读
+trino>=0.328           # 连 Trino 取数（没有内网环境可以不装，走 sample 模式）
+# pyppeteer>=1.0       # 原来用来给 HTML 截图，供手机端看；现在有 PDF 就没必要了，按需装

@@ -17,6 +17,20 @@ Every project is organised so the takeaways are easy to follow: a one-line summa
 | 05 | [Comments_NLP](./projects/05_Comments_NLP) | End-to-end NLP on e-commerce/community reviews: multi-source crawling, Chinese tokenisation, sentiment, word clouds and LDA topic clustering. | `Python` | `requests` `lxml` `BeautifulSoup` `Selenium` `Scrapy` `jieba` `SnowNLP` `gensim` `pyLDAvis` `wordcloud` | [README](./projects/05_Comments_NLP/README_EN.md) | [LDA topic clustering](./projects/05_Comments_NLP/Tmall_Review_Crawling_and_LDA-Based_Topic_Clustering_Implementation.py) | [Positive word cloud](./projects/05_Comments_NLP/thesis_project/wordcloud_from_fre_pos.png) |
 | 06 | [Onchain_AML_Arbitrage](./projects/06_Onchain_AML_Arbitrage) | AML fund-splitting tracing and Uniswap multi-hop arbitrage path mining on Ethereum data with a Neo4j graph database. | `Cypher` `Python` | `web3` `neo4j` `pandas` `tqdm` | [README](./projects/06_Onchain_AML_Arbitrage/README_EN.md) | [neo4j_arbitrage_mining.cypher](./projects/06_Onchain_AML_Arbitrage/neo4j_arbitrage_mining.cypher) | [AML graph analysis](./projects/06_Onchain_AML_Arbitrage/Neo4j_cypher_analysis_AML.png) |
 
+## 🚀 Running it locally
+
+Every project ships a minimal entry point — no real database needed, sample data is in the repo:
+
+| Project | Command | Note |
+| --- | --- | --- |
+| 01 Sales_EDA | `python src/eda_funnel.py` → `streamlit run app.py` | funnel/repurchase metrics + a small page |
+| 02 KA_Dashboard | `docker compose up -d` → `python src/ka_tier.py` | local MySQL + tiering dry run |
+| 03 Periodic_Reports | `python src/report_pipeline.py` | produces an HTML + Excel weekly report, no email |
+| 05 Comments_NLP | `streamlit run app.py` | sample comments, sentiment + word frequency |
+| 06 Onchain_AML | `docker compose up -d` → `python aml_analysis.py` | local Neo4j, after importing data |
+
+Copy each `config.example.yaml` to `config.yaml`; secrets live in `.env` and are never committed.
+
 ## 🧭 Layout
 
 ```

@@ -1,3 +1,4 @@
+import os
 import urllib
 from bs4 import BeautifulSoup
 import re
@@ -26,7 +27,8 @@ def GetData(baseurl):
 	# 获取指定网页的内容
 	try:
 		def AskUrl(url):
-			proxy = urllib.request.ProxyHandler({'http': '58.253.157.212:9999'})
+			# 代理同样是环境变量；豆瓣封 IP 不算狠，很多时候干脆直连
+			proxy = urllib.request.ProxyHandler({'http': os.getenv('DOUBAN_PROXY', '')})
 			opener = urllib.request.build_opener(proxy)  # urllib模块如果使用IP代理就需要写的一句build_opener
 			urllib.request.install_opener(opener)
 			head = {'User-Agent': 'Mozilla / 5.0(WindowsNT10.0;Win64;x64;rv: 84.0) Gecko / 20100101Firefox / 84.0'}

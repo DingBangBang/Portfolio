@@ -4,6 +4,7 @@ venv/
 env/
 .env
 .env.*
+!.env.example
 
 # ----- 缓存 -----
 __pycache__/
@@ -16,6 +17,11 @@ __pycache__/
 logs/
 tmp/
 *.tmp
+
+# ----- 本项目产物 / 本机配置 -----
+# 生成的 HTML / xlsx
+outputs/
+config.yaml
 
 # ----- 编辑器 / 操作系统 -----
 .DS_Store

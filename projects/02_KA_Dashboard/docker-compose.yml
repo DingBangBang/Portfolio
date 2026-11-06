@@ -1,0 +1,24 @@
+# 02 只用到 MySQL（线上是 TiDB，语法兼容）。
+# Grafana 没有塞进来：看板配置是从公司环境导出的 JSON，本地起一个空 Grafana 意义不大，
+# 想看效果直接看 README 里的结构图。
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ka_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${KA_DB_PASSWORD:-changeme}
+      MYSQL_DATABASE: retail
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+      - ka_mysql_data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${KA_DB_PASSWORD:-changeme}"]
+      interval: 10s
+      retries: 5
+
+volumes:
+  ka_mysql_data:

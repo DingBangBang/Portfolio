@@ -1,100 +1,90 @@
-import json
 import csv
+import json
+
 from web3 import Web3
 
+from config_loader import load_config, require_rpc, setup_logging
+
+log = setup_logging("export_erc20")
+
 # === 配置 ===
-RPC_URL = "https://mainnet.infura.io/v3/4236db2d3bc043bcb27132f759bbcb86"
-TOKEN_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-START_BLOCK = 25910000
-END_BLOCK = 25910010
+CFG = load_config()
+RPC_URL = require_rpc(CFG)
+ERC20 = CFG["erc20"]
+TOKEN_ADDRESS = ERC20["token_address"]
+START_BLOCK = ERC20["start_block"]
+END_BLOCK = ERC20["end_block"]
 
 # === 连接以太坊节点 ===
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
 if not w3.is_connected():
-    print("❌ 节点连接失败")
-    exit()
-print(f"✅ 节点连接成功，当前区块: {w3.eth.block_number}")
+    raise SystemExit("节点连不上，检查 .env 里的 RPC_URL")
+log.info("节点连接成功，当前区块 %s", w3.eth.block_number)
 
 # === 从本地文件加载 ABI ===
 try:
-    with open('usdt_abi.json', 'r') as f:
+    with open(ERC20.get("abi_file", "usdt_abi.json"), "r") as f:
         token_abi = json.load(f)
-    print("✅ 从本地文件加载 ABI 成功")
+    log.info("从本地文件加载 ABI 成功")
 except FileNotFoundError:
-    print("❌ 找不到 usdt_abi.json 文件")
-    exit()
+    # ABI 没提交（几十 KB 的 json，也没人爱看），从 etherscan 复制一份存本地就行
+    raise SystemExit("找不到 ABI 文件，去 etherscan 复制 USDT 的 ABI 存成 usdt_abi.json")
 
 # === 创建合约对象 ===
 contract = w3.eth.contract(address=TOKEN_ADDRESS, abi=token_abi)
 
 # === 获取 Transfer 事件 ===
 try:
-    print(f"📊 正在获取区块 {START_BLOCK} 到 {END_BLOCK} 的 Transfer 事件...")
-    
+    log.info("获取区块 %s ~ %s 的 Transfer 事件", START_BLOCK, END_BLOCK)
+
     transfer_topic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-    
+
     logs = w3.eth.get_logs({
-        'address': TOKEN_ADDRESS,
-        'topics': [transfer_topic],
-        'fromBlock': START_BLOCK,
-        'toBlock': END_BLOCK
+        "address": TOKEN_ADDRESS,
+        "topics": [transfer_topic],
+        "fromBlock": START_BLOCK,
+        "toBlock": END_BLOCK,
     })
-    
-    print(f"✅ 获取到 {len(logs)} 条事件记录")
+    log.info("拿到 %s 条事件记录", len(logs))
 
     # === 保存到 CSV 文件 ===
-    # 创建 nodes 和 relationships 两个文件
-    nodes_file = open('usdt_addresses.csv', 'w', newline='', encoding='utf-8')
-    rels_file = open('usdt_transfers.csv', 'w', newline='', encoding='utf-8')
-    
+    nodes_out = ERC20.get("output_nodes", "usdt_addresses.csv")
+    rels_out = ERC20.get("output_rels", "usdt_transfers.csv")
+    nodes_file = open(nodes_out, "w", newline="", encoding="utf-8")
+    rels_file = open(rels_out, "w", newline="", encoding="utf-8")
+
     nodes_writer = csv.writer(nodes_file)
     rels_writer = csv.writer(rels_file)
-    
-    # 写入表头（符合 Neo4j 导入格式）
-    nodes_writer.writerow(['address:ID(Address)'])
-    rels_writer.writerow([':START_ID(Address)', ':END_ID(Address)', 'value:long', 'block_number:int'])
-    
-    # 用集合去重地址
+
+    # 表头要跟 neo4j-admin import 对齐：value 用 string（大额会超 long），块高用 int
+    nodes_writer.writerow(["address:ID(Address)"])
+    rels_writer.writerow([":START_ID(Address)", ":END_ID(Address)", "value:string", "block_number:int"])
+
     addresses = set()
-    
-    for log in logs:
-        # 提取 from, to, value
-        from_addr = '0x' + log['topics'][1].hex()[-40:] if len(log['topics']) > 1 else None
-        to_addr = '0x' + log['topics'][2].hex()[-40:] if len(log['topics']) > 2 else None
-        value = int(log['data'].hex(), 16) if log['data'] else 0
-        block_num = log['blockNumber']
-        
-        # 跳过无效记录
+
+    # 注意：循环变量别叫 log，之前就是叫 log，加了 logging 之后把自己坑了
+    for entry in logs:
+        from_addr = "0x" + entry["topics"][1].hex()[-40:] if len(entry["topics"]) > 1 else None
+        to_addr = "0x" + entry["topics"][2].hex()[-40:] if len(entry["topics"]) > 2 else None
+        value = int(entry["data"].hex(), 16) if entry["data"] else 0
+        block_num = entry["blockNumber"]
+
         if not from_addr or not to_addr:
             continue
-            
-        # 收集地址
+
         addresses.add(from_addr)
         addresses.add(to_addr)
-        
-        # 写入关系（每一笔转账就是一条关系）
         rels_writer.writerow([from_addr, to_addr, value, block_num])
-    
-    # 写入所有地址节点
+
     for addr in addresses:
         nodes_writer.writerow([addr])
-    
-    # 关闭文件
+
     nodes_file.close()
     rels_file.close()
-    
-    print(f"\n✅ 数据保存成功！")
-    print(f"   📁 地址文件: usdt_addresses.csv (共 {len(addresses)} 个唯一地址)")
-    print(f"   📁 转账关系: usdt_transfers.csv (共 {len(logs)} 条转账记录)")
-    
-    # 打印前5条作为预览
-    print(f"\n📋 转账记录预览（前5条）:")
-    with open('usdt_transfers.csv', 'r') as f:
-        lines = f.readlines()
-        for i, line in enumerate(lines[:6]):  # 包含表头
-            print(f"   {line.strip()}")
+    log.info("保存完成：%s（%s 个地址） / %s（%s 条转账）", nodes_out, len(addresses), rels_out, len(logs))
 
 except Exception as e:
-    print(f"❌ 获取日志失败: {e}")
+    log.error("获取日志失败：%s", e)
     if "query returned more than 10000 results" in str(e):
-        print("💡 提示：单次查询结果超过10000条，请缩小到10-50个区块再试")
+        log.error("单次查询超过 10000 条，把区块范围缩到 10~50 个再试")
+    raise

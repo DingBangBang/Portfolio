@@ -1,0 +1,8 @@
+# 06 Onchain_AML_Arbitrage 依赖
+
+web3>=6.0              # 链上数据读取
+pandas>=1.5            # 数据整理
+tqdm>=4.65             # 区块扫起来慢，没进度条心里没底
+neo4j>=5.0             # Neo4j 官方驱动
+pyyaml>=6.0
+python-dotenv>=1.0     # RPC / 密码从 .env 读
