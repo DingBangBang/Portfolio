@@ -157,7 +157,7 @@ chunk 也试过 200000，整月要跑 11 分钟，太磨人，最后定在 50 �
 ## 9. 致谢 / 开发说明
 
 - 数据来自 Kaggle 公开数据集，感谢原作者的整理；
-- Dockerfile、`app.py` 的页面骨架、部分 matplotlib/plotly 样式代码是 Cursor 和 Cline 辅助生成的，我自己改了几轮才用；
+- Dockerfile、`app.py` 的页面骨架、部分 matplotlib/plotly 样式代码是Agent辅助生成的，我自己改了几轮才用；
 - 核心口径（漏斗分母、GMV 去重规则、复购定义）和所有结论都是我实际跑出来、并且跟同事对过数的；
 
 ## 10. 运行结果截图
