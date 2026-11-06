@@ -132,6 +132,6 @@ openpyxl 按字符宽度算，中文字符占两个宽度，自动列宽基本�
 
 ## 9. 致谢 / 开发说明
 
-- SQL 口径、报表结构、周会上的结论都是我自己搞的，跟运营对过数；
-- `report_pipeline.py` 的骨架、Jinja2 模板的 HTML 结构、Dockerfile 由 Cline 和 Cursor 辅助生成，模板我按实际报表样子改了两轮；
+- SQL 口径、报表结构、周会上的结论都是从0到1，跟运营对过数，也做过相应的技术培训和分享，在生产环境成功运行28个月+，期间两次小功能迭代，无需大改版；
+- `report_pipeline.py` 的骨架、Jinja2 模板的 HTML 结构、Dockerfile 由Agent辅助生成，模板我按实际报表样子改了两轮；
 - `sample_data/weekly_metrics.csv` 是照着真实报表的量级造的假数据，不是线上数据。
