@@ -26,18 +26,6 @@ flowchart LR
     A[Ethereum mainnet<br/>RPC node] -->|web3.py get_block / get_logs| B[raw transfers]
     B -->|csv| C[transactions.csv<br/>usdt_transfers.csv]
     C -->|unify_csv_format.py| D[*_unified.csv]
-    D -->|neo4j-admin import| E[(Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address)]
-    E --> F[AML: fan-out tracing]
-    E --> G[arbitrage: rate loops<br/>reduce multiply]
-    H[Uniswap V2 pools] -->|getReserves| I[assets_core.csv<br/>trading_pairs_core.csv]
-    I --> E
-```
-
-```mermaid
-flowchart LR
-    A[Ethereum mainnet<br/>RPC node] -->|web3.py get_block / get_logs| B[raw transfers]
-    B -->|csv| C[transactions.csv<br/>usdt_transfers.csv]
-    C -->|unify_csv_format.py| D[*_unified.csv]
     %% D -->|neo4j-admin import| E[(Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address)]
     D -->|neo4j-admin import| E[("Neo4j<br/>Address -[:SENT]-> Transaction -[:TO]-> Address")]
     E --> F[AML: fan-out tracingbr/>Cypher longer route]
