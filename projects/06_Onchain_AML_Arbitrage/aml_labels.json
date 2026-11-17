@@ -1,0 +1,20 @@
+{
+  "_comment": "示例标签库：仅收录公开可查的基础设施/混币器地址，用于演示『命中标签』规则。生产环境请替换为内部名单 + OFAC SDN + 商业标签服务（Chainalysis / TRM / Elliptic），并定期刷新。",
+  "version": "2026-11",
+  "risk_weight_note": "正权重=增加风险分；负权重=缓解因子（服务商地址出度天然很高，不代表可疑）。",
+  "labels": [
+    {"address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d", "label": "Uniswap V2 Router02", "category": "dex_router", "risk_weight": -12},
+    {"address": "0xe592427a0aece92de3edee1f18e0157c05861564", "label": "Uniswap V3 SwapRouter", "category": "dex_router", "risk_weight": -12},
+    {"address": "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad", "label": "Uniswap Universal Router", "category": "dex_router", "risk_weight": -12},
+    {"address": "0x1111111254eeb25477b68fb85ed929f73a960582", "label": "1inch v5 Router", "category": "dex_router", "risk_weight": -10},
+    {"address": "0xdef1c0ded9bec7f1a1670819833240f027b25eff", "label": "0x Exchange Proxy", "category": "dex_router", "risk_weight": -10},
+    {"address": "0x00000000000000adc04c56bf30ac9d3c0aaf14dc", "label": "OpenSea Seaport 1.5", "category": "infra_contract", "risk_weight": -10},
+    {"address": "0x28c6c06298d514db089934071355e5743bf21d60", "label": "Binance 14 (hot wallet)", "category": "exchange", "risk_weight": -8},
+    {"address": "0xdac17f958d2ee523a2206206994597c13d831ec7", "label": "Tether: USDT contract", "category": "token_contract", "risk_weight": -15},
+    {"address": "0x12d66f87a04a9e220743712ce6d9bb1b5616b8fc", "label": "Tornado Cash 0.1 ETH pool", "category": "mixer", "risk_weight": 22},
+    {"address": "0x47ce0c6ed5b0ce3d3a51fdb1c52dc66a7c3c2936", "label": "Tornado Cash 1 ETH pool", "category": "mixer", "risk_weight": 22},
+    {"address": "0x910cbd523d972eb0a6f4cae4618ad62622b39dbf", "label": "Tornado Cash 10 ETH pool", "category": "mixer", "risk_weight": 24},
+    {"address": "0xa160cdab225685da1d56aa342ad8841c3b53f291", "label": "Tornado Cash 100 ETH pool", "category": "mixer", "risk_weight": 24},
+    {"address": "0x8589427373d6d84e98730d7795d8f6f8731fda16", "label": "Tornado Cash router (example)", "category": "mixer", "risk_weight": 22}
+  ]
+}

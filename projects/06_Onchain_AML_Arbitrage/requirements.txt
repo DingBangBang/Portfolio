@@ -1,8 +1,14 @@
 # 06 Onchain_AML_Arbitrage 依赖
 
+# ---- v1：链上取数 / 图库 / 进度条 / 配置 ----
 web3>=6.0              # 链上数据读取
 pandas>=1.5            # 数据整理
 tqdm>=4.65             # 区块扫起来慢，没进度条心里没底
 neo4j>=5.0             # Neo4j 官方驱动
-pyyaml>=6.0
+pyyaml>=6.0            # config_loader 读 config.yaml
 python-dotenv>=1.0     # RPC / 密码从 .env 读
+
+# ---- v2：规则引擎 / 套利优化 / 对冲成本 ----
+# aml_graph.py、aml_rule_engine.py、arbitrage_optimizer.py、hedge_sizing.py
+# 只用 Python 标准库（csv / json / math / statistics / unittest），无需额外安装；
+# fetch_uniswap_reserves.py 复用上面的 web3（以及可选的 config_loader）。

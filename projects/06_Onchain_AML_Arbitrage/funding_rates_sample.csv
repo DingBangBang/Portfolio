@@ -1,0 +1,4 @@
+asset,funding_rate_8h_bps,basis_bps,perp_taker_fee_bps,max_leverage,venue
+ETH,1.2,3.5,4.5,25,Binance USDT-M
+BTC,0.8,2.0,4.0,25,Binance USDT-M
+SOL,2.5,6.0,5.0,20,Binance USDT-M

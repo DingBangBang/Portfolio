@@ -1,0 +1,137 @@
+{
+  "generated_by": "aml_rule_engine.py",
+  "rule_catalog": {
+    "R01": {
+      "name_cn": "拆分转账 FAN_OUT",
+      "name_en": "Fan-out splitting",
+      "weight": 18,
+      "severity": "high"
+    },
+    "R02": {
+      "name_cn": "资金归集 FAN_IN",
+      "name_en": "Fan-in consolidation",
+      "weight": 15,
+      "severity": "medium"
+    },
+    "R03": {
+      "name_cn": "拆分-归集二部结构 SPLIT_MERGE",
+      "name_en": "Split-then-merge",
+      "weight": 22,
+      "severity": "high"
+    },
+    "R04": {
+      "name_cn": "快进快出 PASS_THROUGH",
+      "name_en": "Pass-through / mule",
+      "weight": 20,
+      "severity": "high"
+    },
+    "R05": {
+      "name_cn": "剥洋葱链 PEEL_CHAIN",
+      "name_en": "Peel chain",
+      "weight": 25,
+      "severity": "critical"
+    },
+    "R06": {
+      "name_cn": "粉尘攻击 DUSTING",
+      "name_en": "Dusting attack",
+      "weight": 20,
+      "severity": "high"
+    },
+    "R07": {
+      "name_cn": "地址投毒 ADDRESS_POISONING",
+      "name_en": "Address poisoning",
+      "weight": 28,
+      "severity": "critical"
+    },
+    "R08": {
+      "name_cn": "整数/临界金额 ROUND_AMOUNT",
+      "name_en": "Round / just-below-threshold amounts",
+      "weight": 12,
+      "severity": "medium"
+    },
+    "R09": {
+      "name_cn": "自转 SELF_TRANSFER",
+      "name_en": "Self transfer",
+      "weight": 10,
+      "severity": "low"
+    },
+    "R10": {
+      "name_cn": "同区块批量出账 BLOCK_BURST",
+      "name_en": "Same-block burst",
+      "weight": 15,
+      "severity": "medium"
+    },
+    "R11": {
+      "name_cn": "高中心度枢纽 HUB_CENTRALITY",
+      "name_en": "Hub centrality",
+      "weight": 8,
+      "severity": "low"
+    },
+    "R12": {
+      "name_cn": "实体识别/标签 LABELED_ENTITY",
+      "name_en": "Labeled entity / service heuristic",
+      "weight": 0,
+      "severity": "info"
+    }
+  },
+  "dataset_stats": {
+    "ETH": {
+      "asset": "ETH",
+      "nodes": 56285,
+      "edges": 73875,
+      "self_loops": 184,
+      "total_value": 144116.844381,
+      "max_degree": 6443,
+      "median_degree": 1,
+      "p95_degree": 4,
+      "source_file": "transactions_unified.csv",
+      "rule_hit_counts": {
+        "R01": 115,
+        "R02": 163,
+        "R03": 133,
+        "R04": 229,
+        "R05": 3,
+        "R06": 1,
+        "R07": 233,
+        "R08": 42,
+        "R09": 23,
+        "R11": 197,
+        "R12": 24
+      },
+      "hit_edges": 1163,
+      "scored_addresses": 837
+    },
+    "USDT": {
+      "asset": "USDT",
+      "nodes": 1250,
+      "edges": 1036,
+      "self_loops": 0,
+      "total_value": 2441657.723693,
+      "max_degree": 177,
+      "median_degree": 1,
+      "p95_degree": 3,
+      "source_file": "usdt_transfers_unified.csv",
+      "rule_hit_counts": {
+        "R01": 1,
+        "R02": 1,
+        "R03": 4,
+        "R04": 4,
+        "R06": 4,
+        "R07": 12,
+        "R08": 2,
+        "R10": 14,
+        "R11": 1,
+        "R12": 1
+      },
+      "hit_edges": 44,
+      "scored_addresses": 32
+    }
+  },
+  "alerts": 869,
+  "level_distribution": {
+    "critical": 1,
+    "high": 43,
+    "medium": 66,
+    "low": 759
+  }
+}
